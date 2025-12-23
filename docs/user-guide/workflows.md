@@ -1,0 +1,167 @@
+# Workflows
+
+Copinance OS supports two types of workflows for stock research.
+
+## Static Workflows
+
+Static workflows follow a predefined analysis pipeline with consistent steps.
+
+### What It Does
+
+1. Fetches stock information
+2. Gets current market quote
+3. Retrieves historical price data (timeframe-dependent)
+4. Gets fundamental data
+5. Calculates key metrics and trends
+6. Generates analysis summary
+
+### When to Use
+
+- ✅ Consistent, repeatable analysis
+- ✅ No API key required
+- ✅ Fast execution
+- ✅ Comprehensive coverage
+
+### Example
+
+```bash
+copinance research run AAPL --workflow static --timeframe mid_term
+```
+
+## Agentic Workflows
+
+Agentic workflows use AI to dynamically analyze stocks based on your questions.
+
+### What It Does
+
+1. Understands your question
+2. Selects appropriate tools (data providers)
+3. Gathers relevant data
+4. Analyzes and synthesizes information
+5. Provides tailored answer adapted to your financial literacy level
+
+### When to Use
+
+- ✅ Custom questions and analysis
+- ✅ Adaptive to specific needs
+- ✅ Natural language interaction
+- ✅ Personalized responses based on financial literacy level
+- ⚠️ Requires Gemini API key
+
+### Example
+
+```bash
+copinance research ask AAPL "What are the key financial risks?"
+```
+
+### Setup Required
+
+See [Configuration](configuration.md) for setting up Gemini API key.
+
+## Timeframes
+
+Both workflow types adapt to the research timeframe:
+
+### Short-term
+- **Focus**: Recent price movements, technical indicators
+- **Data**: Last 30 days, daily intervals
+- **Use case**: Trading decisions
+
+### Mid-term
+- **Focus**: Quarterly fundamentals, price trends
+- **Data**: Last 6 months, daily intervals
+- **Use case**: Swing trading
+
+### Long-term
+- **Focus**: Annual fundamentals, long-term trends
+- **Data**: Last 2 years, weekly intervals
+- **Use case**: Investment decisions
+
+## Choosing a Workflow
+
+**Use Static if:**
+- You want consistent, comprehensive analysis
+- You don't have an API key
+- You need fast results
+
+**Use Agentic if:**
+- You have specific questions
+- You want adaptive analysis
+- You have an API key configured
+
+## Research Lifecycle: Create, Execute, and Run
+
+Copinance OS provides three commands for managing research: `create`, `execute`, and `run`. Each serves a different purpose in the research lifecycle.
+
+### The Three Commands
+
+1. **`create`** - Creates a research task without executing it
+   - Prepares research with specific configuration
+   - Returns a research ID for later use
+   - Useful for batch processing and scheduling
+
+2. **`execute`** - Executes an existing research by ID
+   - Can be called multiple times on the same research
+   - Allows re-running with different contexts or questions
+   - Useful for iterative analysis
+
+3. **`run`** - Creates and executes in one command
+   - Convenience method for quick analysis
+   - Best for one-off research tasks
+   - No need to manage research IDs
+
+### When to Use Each
+
+**Use `create` when:**
+- You want to prepare research tasks in advance
+- You're setting up multiple research tasks for batch processing
+- You need to schedule research for later execution
+- You want to configure research before running it
+
+**Use `execute` when:**
+- You have an existing research ID from a previous `create` command
+- You want to re-run research with updated data
+- You need to run the same research with different questions/contexts
+- You're doing iterative analysis on the same stock
+
+**Use `run` when:**
+- You want quick one-off analysis
+- You don't need to save or reuse the research
+- You're doing exploratory research
+- You're testing workflows
+
+### Example Workflows
+
+**Batch Processing:**
+```bash
+# Create multiple research tasks
+copinance research create AAPL --workflow static
+copinance research create MSFT --workflow static
+copinance research create GOOGL --workflow static
+
+# Execute them later (or in parallel)
+copinance research execute <research-id-1>
+copinance research execute <research-id-2>
+copinance research execute <research-id-3>
+```
+
+**Iterative Analysis:**
+```bash
+# Create research once
+copinance research create AAPL --workflow agentic
+
+# Execute with different questions
+copinance research execute <research-id> --question "What are the key risks?"
+copinance research execute <research-id> --question "What is the growth outlook?"
+```
+
+**Quick Analysis:**
+```bash
+# One command for quick results
+copinance research run AAPL --workflow static
+```
+
+## Next Steps
+
+- [CLI Reference](cli.md) - Command details
+- [Configuration](configuration.md) - Setting up API keys

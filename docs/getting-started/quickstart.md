@@ -1,0 +1,126 @@
+# Quick Start
+
+Get started with Copinance OS in 5 minutes.
+
+## Your First Research
+
+### 1. Search for a Stock
+
+```bash
+copinance stock search "Apple"
+```
+
+This will show you matching stocks with their symbols.
+
+### 2. Run a Static Workflow
+
+```bash
+copinance research run AAPL --workflow static
+```
+
+This performs a comprehensive static analysis with:
+- Current market quote
+- Historical price data
+- Fundamental analysis
+- Key metrics and trends
+
+### 3. View Results
+
+The results are displayed in the terminal with:
+- Stock information
+- Current quote
+- Price trends
+- Fundamental metrics
+- Analysis summary
+
+## Using Agentic Workflows
+
+For AI-powered analysis, you need to set up a Gemini API key first.
+
+### 1. Get API Key
+
+1. Go to [Google AI Studio](https://aistudio.google.com)
+2. Sign in and create an API key
+3. Copy the key
+
+### 2. Configure
+
+Create a `.env` file in your project root:
+```bash
+COPINANCEOS_GEMINI_API_KEY=your-api-key-here
+```
+
+### 3. Ask a Question
+
+```bash
+copinance research ask AAPL "What is the current price and P/E ratio?"
+```
+
+The AI will analyze the stock and answer your question using available data.
+
+## Working with Profiles
+
+Profiles let you customize research output based on your financial literacy level.
+
+### Automatic Profile Prompting
+
+When you run research commands without a profile, the system will automatically prompt you to set your financial literacy level for more personalized analysis results. You can:
+- Choose to create a profile with your literacy level (beginner, intermediate, or advanced)
+- Decline and continue with default settings
+
+### Create a Profile Manually
+
+You can also create a profile manually:
+
+```bash
+copinance profile create --literacy intermediate --name "My Profile"
+```
+
+### Use Profile in Research
+
+```bash
+copinance research run AAPL --workflow static --profile-id <profile-id>
+```
+
+Or simply use your current profile (set with `profile set-current`).
+
+## Common Workflows
+
+### Quick Analysis
+```bash
+# Static workflow (no API key needed)
+copinance research run AAPL --workflow static
+
+# Agentic workflow (requires API key)
+copinance research ask AAPL "Analyze this stock for me"
+```
+
+### Research Management
+
+Copinance OS provides three commands for research:
+
+- **`run`** - Quick one-off analysis (creates and executes in one command)
+- **`create`** - Create research task for later execution
+- **`execute`** - Execute existing research (can be run multiple times)
+
+```bash
+# Quick analysis (creates and executes)
+copinance research run AAPL --workflow static
+
+# Create research for later
+copinance research create AAPL --workflow static
+
+# Execute existing research
+copinance research execute <research-id>
+
+# View research results
+copinance research get <research-id>
+```
+
+**Why separate commands?** `create` lets you prepare research tasks in advance or batch process multiple stocks. `execute` allows re-running the same research with different contexts or questions. `run` is a convenience for quick analysis. See [CLI Reference](../user-guide/cli.md) for details.
+
+## Next Steps
+
+- [CLI Reference](../user-guide/cli.md) - Complete command guide
+- [Workflows](../user-guide/workflows.md) - Understanding workflow types
+- [Configuration](../user-guide/configuration.md) - Advanced configuration

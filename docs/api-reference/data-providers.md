@@ -1,0 +1,90 @@
+# Data Provider Interfaces
+
+Interfaces for implementing custom data providers.
+
+## MarketDataProvider
+
+Provides market data (quotes, historical prices, intraday data).
+
+### Methods
+
+- `get_quote(symbol: str) -> dict[str, Any]` - Current quote
+- `get_historical_data(symbol, start_date, end_date, interval) -> list[StockData]` - Historical prices
+- `get_intraday_data(symbol, interval) -> list[StockData]` - Intraday data
+- `search_stocks(query, limit) -> list[dict[str, Any]]` - Stock search
+
+### Example Implementation
+
+```python
+from copinanceos.domain.ports.data_providers import MarketDataProvider
+
+class MyMarketProvider(MarketDataProvider):
+    async def get_quote(self, symbol: str) -> dict[str, Any]:
+        # Implementation
+        pass
+```
+
+## FundamentalDataProvider
+
+Provides fundamental data (financial statements, SEC filings, ratios).
+
+### Methods
+
+- `get_financial_statements(symbol, statement_type, period) -> dict[str, Any]` - Financial statements
+- `get_sec_filings(symbol, filing_types, limit) -> list[dict[str, Any]]` - SEC filings
+- `get_detailed_fundamentals(symbol, periods, period_type) -> StockFundamentals` - Comprehensive fundamentals
+
+### Example Implementation
+
+```python
+from copinanceos.domain.ports.data_providers import FundamentalDataProvider
+
+class MyFundamentalProvider(FundamentalDataProvider):
+    async def get_financial_statements(
+        self, symbol: str, statement_type: str, period: str = "annual"
+    ) -> dict[str, Any]:
+        # Implementation
+        pass
+```
+
+## AlternativeDataProvider
+
+Provides alternative data (sentiment, web traffic, satellite imagery).
+
+### Methods
+
+- `get_sentiment_data(symbol, sources, lookback_days) -> dict[str, Any]` - Sentiment analysis
+- `get_web_traffic_metrics(symbol, start_date, end_date) -> dict[str, Any]` - Web traffic
+- `get_satellite_imagery_insights(symbol, locations) -> dict[str, Any]` - Satellite data
+- `get_supply_chain_data(symbol) -> dict[str, Any]` - Supply chain data
+- `get_transaction_data(symbol, start_date, end_date) -> dict[str, Any]` - Transaction data
+
+## MacroeconomicDataProvider
+
+Provides macroeconomic indicators.
+
+### Methods
+
+- `get_central_bank_policy(country) -> dict[str, Any]` - Central bank policy
+- `get_geopolitical_risk_index(regions) -> dict[str, Any]` - Geopolitical risk
+- `get_industry_indicators(industry) -> dict[str, Any]` - Industry indicators
+- `get_economic_calendar(start_date, end_date) -> list[dict[str, Any]]` - Economic calendar
+
+## Base Interface
+
+All providers inherit from `DataProvider`:
+
+```python
+class DataProvider(ABC):
+    @abstractmethod
+    async def is_available(self) -> bool:
+        """Check if provider is available."""
+
+    @abstractmethod
+    def get_provider_name(self) -> str:
+        """Get provider name."""
+```
+
+## Implementation Guide
+
+See [Extending](../developer-guide/extending.md) for detailed implementation guide.

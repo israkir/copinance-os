@@ -1,0 +1,104 @@
+# Testing
+
+Testing guidelines and structure for Copinance OS.
+
+## Test Structure
+
+Tests are organized to mirror the source code structure:
+
+```
+tests/
+├── unit/                    # Unit tests
+│   └── copinanceos/
+│       ├── domain/
+│       ├── application/
+│       └── infrastructure/
+└── integration/             # Integration tests
+    └── copinanceos/
+        └── infrastructure/
+```
+
+## Running Tests
+
+```bash
+# All tests
+pytest
+
+# Unit tests only
+pytest -m unit
+
+# Integration tests only
+pytest -m integration
+
+# With coverage
+pytest --cov=copinanceos --cov-report=html
+```
+
+## Writing Tests
+
+### Unit Tests
+
+Test individual components in isolation:
+
+```python
+import pytest
+from copinanceos.domain.models.research import Research, ResearchStatus
+
+def test_research_creation():
+    research = Research(
+        stock_symbol="AAPL",
+        timeframe=ResearchTimeframe.MID_TERM,
+        workflow_type="static"
+    )
+    assert research.status == ResearchStatus.PENDING
+```
+
+### Integration Tests
+
+Test component interactions:
+
+```python
+import pytest
+from copinanceos.infrastructure.repositories import ResearchRepositoryImpl
+
+@pytest.mark.integration
+async def test_research_repository_save_and_get(isolated_storage):
+    repo = ResearchRepositoryImpl(storage=isolated_storage)
+    research = Research(stock_symbol="AAPL", ...)
+
+    saved = await repo.save(research)
+    retrieved = await repo.get_by_id(saved.id)
+
+    assert retrieved is not None
+    assert retrieved.id == saved.id
+```
+
+## Test Fixtures
+
+Common fixtures are available in `tests/conftest.py`:
+
+- `isolated_storage`: Isolated storage for each test
+- `profile_repository`: Profile repository with isolated storage
+- `research_repository`: Research repository with isolated storage
+
+## Test Markers
+
+Use markers to categorize tests:
+
+```python
+@pytest.mark.unit
+def test_unit_example():
+    pass
+
+@pytest.mark.integration
+async def test_integration_example():
+    pass
+```
+
+## Best Practices
+
+1. **Isolation**: Each test should be independent
+2. **Fixtures**: Use fixtures for common setup
+3. **Async**: Use `pytest-asyncio` for async tests
+4. **Coverage**: Aim for high test coverage
+5. **Naming**: Use descriptive test names

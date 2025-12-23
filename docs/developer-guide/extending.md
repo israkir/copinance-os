@@ -1,0 +1,168 @@
+# Extending Copinance OS
+
+Add custom data providers, analyzers, and strategies.
+
+## Adding a Custom Data Provider
+
+### Step 1: Choose Interface
+
+Select the appropriate interface from `copinanceos.domain.ports.data_providers`:
+- `MarketDataProvider` - Market data (quotes, historical prices)
+- `FundamentalDataProvider` - Financial statements, SEC filings
+- `AlternativeDataProvider` - Sentiment, web traffic, alternative data
+- `MacroeconomicDataProvider` - Economic indicators
+
+### Step 2: Implement the Interface
+
+```python
+from copinanceos.domain.ports.data_providers import MarketDataProvider
+from copinanceos.domain.models.stock import StockData
+from datetime import datetime
+from typing import Any
+import httpx
+
+class AlphaVantageProvider(MarketDataProvider):
+    """Alpha Vantage market data provider."""
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._client = httpx.AsyncClient()
+
+    async def is_available(self) -> bool:
+        """Check if provider is available."""
+        try:
+            # Test API connection
+            return True
+        except Exception:
+            return False
+
+    def get_provider_name(self) -> str:
+        return "alpha_vantage"
+
+    async def get_quote(self, symbol: str) -> dict[str, Any]:
+        """Get current quote."""
+        response = await self._client.get(
+            "https://www.alphavantage.co/query",
+            params={
+                "function": "GLOBAL_QUOTE",
+                "symbol": symbol,
+                "apikey": self.api_key,
+            }
+        )
+        data = response.json()
+        quote = data.get("Global Quote", {})
+        return {
+            "symbol": symbol,
+            "current_price": float(quote.get("05. price", "0")),
+            "volume": int(quote.get("06. volume", "0")),
+            # ... map other fields
+        }
+
+    async def get_historical_data(
+        self,
+        symbol: str,
+        start_date: datetime,
+        end_date: datetime,
+        interval: str = "1d",
+    ) -> list[StockData]:
+        """Get historical data."""
+        # Implementation here
+        # Convert API response to list[StockData]
+        return []
+
+    async def get_intraday_data(
+        self,
+        symbol: str,
+        interval: str = "1min",
+    ) -> list[StockData]:
+        """Get intraday data."""
+        return []
+
+    async def search_stocks(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Search for stocks."""
+        return []
+```
+
+### Step 3: Register in Container
+
+```python
+from copinanceos.infrastructure.containers import Container
+from dependency_injector import providers
+
+container = Container()
+container.market_data_provider.override(
+    providers.Singleton(AlphaVantageProvider, api_key="your-key")
+)
+```
+
+### Step 4: Use in Workflows
+
+The provider will automatically be used by workflows that need market data.
+
+## Adding a Custom Analyzer
+
+### 1. Implement the Interface
+
+```python
+from copinanceos.domain.ports.analyzers import LLMAnalyzer
+from typing import Any
+
+class MyCustomAnalyzer(LLMAnalyzer):
+    """Custom LLM analyzer."""
+
+    async def analyze(self, prompt: str, context: dict[str, Any]) -> str:
+        """Analyze using custom logic."""
+        # Your implementation
+        return "Analysis result"
+```
+
+### 2. Register in Container
+
+Similar to data providers, override the analyzer in your container.
+
+## Adding a Custom Workflow
+
+### 1. Extend BaseWorkflowExecutor
+
+```python
+from copinanceos.infrastructure.workflows.base import BaseWorkflowExecutor
+from copinanceos.domain.models.research import Research
+from typing import Any
+
+class MyCustomWorkflow(BaseWorkflowExecutor):
+    """Custom workflow executor."""
+
+    def get_workflow_type(self) -> str:
+        return "custom"
+
+    async def validate(self, research: Research) -> bool:
+        return research.workflow_type == "custom"
+
+    async def _execute_workflow(
+        self, research: Research, context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Execute custom workflow logic."""
+        # Your implementation
+        return {"status": "completed", "results": {}}
+```
+
+### 2. Register in Container
+
+Add to workflow executors factory or override in container.
+
+## Best Practices
+
+1. **Follow interfaces**: Implement all required methods
+2. **Handle errors**: Raise appropriate domain exceptions
+3. **Type hints**: Use proper type annotations
+4. **Documentation**: Document your implementation
+5. **Testing**: Write tests for your extensions
+
+## Available Interfaces
+
+See `src/copinanceos/domain/ports/` for all available interfaces:
+- `data_providers.py` - Data provider interfaces
+- `analyzers.py` - Analyzer interfaces
+- `strategies.py` - Strategy interfaces
+- `repositories.py` - Repository interfaces
+- `workflows.py` - Workflow interfaces

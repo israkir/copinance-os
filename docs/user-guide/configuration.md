@@ -1,0 +1,121 @@
+# Configuration
+
+Configure Copinance OS for your needs.
+
+## Environment Variables
+
+Configuration is done through environment variables or a `.env` file.
+
+### Creating .env File
+
+Create a `.env` file in your project root (same directory as `pyproject.toml`):
+
+```bash
+# .env file
+COPINANCEOS_GEMINI_API_KEY=your-api-key-here
+```
+
+## Gemini API Setup
+
+Required for agentic workflows.
+
+### 1. Get API Key
+
+1. Go to [Google AI Studio](https://aistudio.google.com)
+2. Sign in with your Google account
+3. Click "Create API Key"
+4. Copy your API key
+
+### 2. Configure
+
+**Option A: .env file (Recommended)**
+```bash
+COPINANCEOS_GEMINI_API_KEY=your-api-key-here
+```
+
+**Option B: Environment Variable**
+```bash
+export COPINANCEOS_GEMINI_API_KEY=your-api-key-here
+```
+
+### 3. Verify
+
+```bash
+copinance research ask AAPL "What is the current price?"
+```
+
+If configured correctly, you'll see AI analysis. If not, check:
+- `.env` file is in the project root
+- Variable name is exactly `COPINANCEOS_GEMINI_API_KEY`
+- No extra spaces around the `=` sign
+
+## Model Selection
+
+Choose which Gemini model to use:
+
+```bash
+# Default (most capable)
+COPINANCEOS_GEMINI_MODEL=gemini-1.5-pro
+
+# Latest and fastest
+COPINANCEOS_GEMINI_MODEL=gemini-2.5-flash
+
+# Faster alternative
+COPINANCEOS_GEMINI_MODEL=gemini-1.5-flash
+```
+
+**Default:** `gemini-1.5-pro` (most capable). Use `gemini-2.5-flash` for faster responses.
+
+## Storage Configuration
+
+Configure where data is stored:
+
+```bash
+# Storage type: 'memory' or 'file'
+COPINANCEOS_STORAGE_TYPE=file
+
+# Storage path (for file storage)
+COPINANCEOS_STORAGE_PATH=~/.copinanceos
+```
+
+## Complete .env Example
+
+```bash
+# Gemini API (required for agentic workflows)
+COPINANCEOS_GEMINI_API_KEY=AIzaSy...your-actual-key
+
+# Model selection (optional, default: gemini-1.5-pro)
+COPINANCEOS_GEMINI_MODEL=gemini-1.5-pro
+
+# Storage (optional)
+COPINANCEOS_STORAGE_TYPE=file
+COPINANCEOS_STORAGE_PATH=~/.copinanceos
+```
+
+## Security
+
+⚠️ **Never commit your `.env` file to version control!**
+
+Make sure `.env` is in your `.gitignore`:
+```gitignore
+.env
+.env.local
+```
+
+## Troubleshooting
+
+### "LLM analyzer not configured"
+- Check `.env` file location (should be in project root)
+- Verify variable name is correct
+- Restart terminal after setting environment variables
+
+### "Gemini not available"
+Install the required package:
+```bash
+pip install google-genai
+```
+
+### "Gemini API key is not configured"
+- Verify API key is set correctly
+- Check for typos in variable name
+- Ensure no quotes around the key value

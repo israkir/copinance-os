@@ -1,0 +1,228 @@
+# CLI Reference
+
+Complete guide to using the Copinance OS command-line interface.
+
+## Running Commands
+
+**After installation:**
+```bash
+copinance <command>
+```
+
+**Without installation:**
+```bash
+python -m copinanceos.cli <command>
+```
+
+## Stock Commands
+
+### Search Stocks
+
+Search for stocks by symbol or company name.
+
+```bash
+copinance stock search "Apple"
+copinance stock search "AAPL" --limit 5
+```
+
+**Options:**
+- `--limit <number>`: Maximum results (default: 10)
+- `--type <type>`: Search type - `auto`, `symbol`, or `general`
+
+## Profile Commands
+
+Profiles customize research output based on your financial literacy level.
+
+**Note:** When you run research commands (`create`, `run`, `execute`, `ask`) without a profile, the system will automatically prompt you to set your financial literacy level for more personalized analysis results.
+
+### Create Profile
+
+```bash
+copinance profile create --literacy intermediate --name "My Profile"
+```
+
+**Literacy levels:** `beginner`, `intermediate`, `advanced`
+
+### List Profiles
+
+```bash
+copinance profile list
+```
+
+### Get Profile
+
+```bash
+copinance profile get <profile-id>
+```
+
+### Set Current Profile
+
+```bash
+copinance profile set-current <profile-id>
+```
+
+### Delete Profile
+
+```bash
+copinance profile delete <profile-id> --force
+```
+
+## Research Commands
+
+Copinance OS provides three separate commands for research management: `create`, `execute`, and `run`. Understanding when to use each helps you work more efficiently.
+
+### Why Three Separate Commands?
+
+**`create`** - Creates a research task without executing it
+- **Use when**: You want to prepare research tasks in advance, schedule them, or set up multiple research tasks before running them
+- **Returns**: A research ID that you can use later
+- **Example**: Create research tasks for multiple stocks, then execute them in batch
+
+**`execute`** - Executes an existing research (by ID)
+- **Use when**: You want to re-run existing research, execute research created earlier, or run the same research with different contexts/questions
+- **Allows**: Multiple executions of the same research with different parameters
+- **Example**: Re-analyze a stock with a new question or updated context
+
+**`run`** - Convenience command that creates AND executes in one step
+- **Use when**: You want quick one-off analyses without managing research lifecycle
+- **Best for**: Quick testing, exploratory analysis, or when you don't need to save/reuse the research
+- **Example**: Quick analysis during market hours
+
+### Create Research
+
+Create a new research task without executing it.
+
+```bash
+copinance research create AAPL --workflow static --timeframe mid_term
+```
+
+**Options:**
+- `--workflow <type>`: `static` or `agentic` (default: `static`)
+- `--timeframe <timeframe>`: `short_term`, `mid_term`, or `long_term` (default: `mid_term`)
+- `--profile-id <id>`: Profile ID for context (optional)
+
+**Note:** If no profile is provided and you don't have a current profile, you'll be prompted to set your financial literacy level for personalized analysis.
+
+**Use Cases:**
+- Prepare research tasks in advance
+- Create multiple research tasks for batch processing
+- Set up research with specific configurations before execution
+- Schedule research for later execution
+
+### Execute Research
+
+Execute an existing research by ID. Can be called multiple times with different contexts.
+
+```bash
+copinance research execute <research-id>
+copinance research execute <research-id> --question "What is the P/E ratio?"
+```
+
+**Options:**
+- `--question <question>`: Custom question for agentic workflows (optional)
+
+**Note:** If the research doesn't have a profile associated, you'll be prompted to set your financial literacy level for personalized analysis.
+
+**Use Cases:**
+- Re-run research with updated data
+- Execute research created earlier
+- Run the same research with different questions/contexts
+- Re-analyze stocks as new data becomes available
+
+### Run Research (Quick)
+
+Create and execute a research workflow in one command. Convenience method for quick analysis.
+
+```bash
+copinance research run AAPL --workflow static
+copinance research run AAPL --workflow agentic --question "Analyze this stock"
+```
+
+**Options:**
+- `--workflow <type>`: `static` or `agentic` (default: `static`)
+- `--timeframe <timeframe>`: `short_term`, `mid_term`, or `long_term` (default: `mid_term`)
+- `--profile-id <id>`: Profile ID for context (optional)
+- `--question <question>`: Custom question for agentic workflows (optional)
+
+**Note:** If no profile is provided and you don't have a current profile, you'll be prompted to set your financial literacy level for personalized analysis.
+
+**Use Cases:**
+- Quick one-off analysis
+- Exploratory research
+- Testing workflows
+- When you don't need to manage research lifecycle
+
+### Get Research
+
+View research details and results.
+
+```bash
+copinance research get <research-id>
+```
+
+### Ask Question (Agentic)
+
+Quick Q&A using agentic workflow.
+
+```bash
+copinance research ask AAPL "What is the current price and P/E ratio?"
+```
+
+**Options:**
+- `--timeframe <timeframe>`: `short_term`, `mid_term`, or `long_term` (default: `mid_term`)
+- `--profile-id <id>`: Profile ID for context (optional)
+
+**Note:**
+- Requires Gemini API key - see [Configuration](configuration.md)
+- If no profile is provided and you don't have a current profile, you'll be prompted to set your financial literacy level for personalized analysis
+
+### Set Research Context
+
+Associate a profile with research.
+
+```bash
+copinance research set-context <research-id> --profile-id <profile-id>
+```
+
+## Examples
+
+### Basic Workflow
+
+```bash
+# 1. Search for a stock
+copinance stock search "Apple"
+
+# 2. Create a profile
+copinance profile create --literacy intermediate --name "Trader"
+
+# 3. Run research
+copinance research run AAPL --workflow static --timeframe mid_term
+```
+
+### Agentic Workflow
+
+```bash
+# Ask a question (requires API key)
+copinance research ask AAPL "What are the key risks for this stock?"
+```
+
+### Research Management
+
+```bash
+# Create research
+copinance research create MSFT --workflow static
+
+# Execute later
+copinance research execute <research-id>
+
+# View results
+copinance research get <research-id>
+```
+
+## Getting Help
+
+```bash
+copinance --help
+copinance research --help
+copinance profile --help
+```

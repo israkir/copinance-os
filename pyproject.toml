@@ -1,0 +1,209 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copinance-os"
+version = "0.1.0"
+description = "Open-source stock research platform and framework with agentic AI and static workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Copinance OS Contributors"}
+]
+keywords = ["stock", "research", "finance", "trading", "ai", "agents", "workflow"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License 2.0",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+dependencies = [
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "pandas>=2.3.3",
+    "numpy>=1.26.0,<3.0",
+    "structlog>=25.5.0",
+    "typer>=0.20.1",
+    "rich>=14.2.0",
+    "yfinance>=0.2.66",
+    "google-genai>=1.56.0",
+    "httpx>=0.27.0",
+    "dependency-injector>=4.48.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "black>=25.12.0",
+    "ruff>=0.14.10",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+]
+
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.1",
+    "mkdocstrings[python]>=1.0.0",
+]
+
+ollama = [
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+copinance = "copinanceos.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/copinance/copinance-os"
+Documentation = "https://copinance.github.io/copinance-os/"
+Repository = "https://github.com/copinance/copinance-os"
+Issues = "https://github.com/copinance/copinance-os/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["copinanceos*"]
+
+[tool.setuptools.package-data]
+copinanceos = [
+    "infrastructure/analyzers/llm/resources/*.json",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=copinanceos",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+filterwarnings = [
+    # Suppress ResourceWarnings from yfinance/pandas/numpy internal SQLite caching
+    # These are from third-party libraries and not actionable for our code
+    "ignore::ResourceWarning",
+    "ignore:unclosed.*:ResourceWarning",
+    "ignore:.*unclosed.*:ResourceWarning",
+    # Suppress event loop deprecation warnings in test fixtures
+    "ignore:There is no current event loop:DeprecationWarning",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+    "slow: Slow running tests",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",        # pycodestyle errors (includes E402: module level import not at top of file)
+    "W",        # pycodestyle warnings
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # flake8-bugbear
+    "C4",       # flake8-comprehensions
+    "UP",       # pyupgrade
+    "PLC0415",  # import-outside-top-level: checks imports are not inside functions/blocks
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "E402",  # module level import not at top of file (allow for optional imports in try/except blocks)
+]
+# Note: PLC0415 (import-outside-top-level) will flag imports inside functions/methods.
+# This helps enforce PEP 8 style: imports should be at module level, not inside functions.
+# Imports in try/except blocks at module level are acceptable for optional dependencies.
+
+[tool.ruff.lint.isort]
+known-first-party = ["copinanceos"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+strict_optional = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "httpx",
+    "httpx.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "copinanceos.infrastructure.analyzers.llm.providers.ollama",
+    "copinanceos.infrastructure.analyzers.llm.providers.gemini",
+]
+disable_error_code = ["unused-ignore"]
+
+[[tool.mypy.overrides]]
+module = [
+    "copinanceos.infrastructure.data_providers.yfinance",
+    "copinanceos.application.use_cases.stock",
+]
+disable_error_code = ["unused-ignore"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

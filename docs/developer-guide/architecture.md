@@ -1,0 +1,110 @@
+# Architecture
+
+Copinance OS follows **Clean Architecture (Hexagonal Architecture)** with clear separation of concerns.
+
+## Overview
+
+```
+┌─────────────────────────────────────────┐
+│           CLI Layer                     │
+│  (User Interface)                       │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│      Application Layer                  │
+│  (Use Cases - Business Operations)      │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│         Domain Layer                    │
+│  (Core Business Logic - No Dependencies)│
+│  • Models (Entities, Value Objects)     │
+│  • Ports (Interfaces)                   │
+│  • Services (Business Logic)            │
+│  • Validation                           │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│      Infrastructure Layer               │
+│  (Implementations - Adapters)           │
+│  • Repositories                         │
+│  • Data Providers                       │
+│  • Workflows                            │
+│  • Container (Dependency Injection)     │
+└─────────────────────────────────────────┘
+```
+
+## Layer Responsibilities
+
+### Domain Layer
+- **Core business logic** with zero external dependencies
+- **Entities**: Research, Stock, ResearchProfile
+- **Ports**: Interfaces for data providers, repositories, workflows
+- **Services**: Complex business logic
+- **Validation**: Domain validation rules
+
+### Application Layer
+- **Use cases**: Business operations (CreateResearch, ExecuteResearch, etc.)
+- **Orchestration**: Coordinates domain objects and infrastructure
+- **Request/Response models**: Type-safe input/output
+
+### Infrastructure Layer
+- **Implementations**: Concrete implementations of domain ports
+- **Repositories**: Data persistence (memory, file, database)
+- **Data Providers**: External data sources (yfinance, EDGAR, etc.)
+- **Workflows**: Research execution engines
+- **Container**: Dependency injection configuration
+
+### CLI Layer
+- **User interface**: Command-line interface
+- **Error handling**: User-friendly error messages
+- **Output formatting**: Rich terminal output
+
+## Design Patterns
+
+### Repository Pattern
+Abstracts data access:
+```python
+# Port (Domain)
+class ResearchRepository(ABC):
+    async def get_by_id(self, research_id: UUID) -> Research | None
+
+# Implementation (Infrastructure)
+class ResearchRepositoryImpl(ResearchRepository):
+    async def get_by_id(self, research_id: UUID) -> Research | None:
+        # Implementation using storage backend
+```
+
+### Use Case Pattern
+Encapsulates business operations:
+```python
+class ExecuteResearchUseCase(UseCase[ExecuteResearchRequest, ExecuteResearchResponse]):
+    async def execute(self, request: ExecuteResearchRequest) -> ExecuteResearchResponse:
+        # Business logic here
+```
+
+### Dependency Injection
+Manages dependencies through container:
+```python
+# Container configuration
+container = Container()
+use_case = container.execute_research_use_case()
+```
+
+## Extension Points
+
+The architecture provides 21 port interfaces for extension:
+
+- **5 Data Provider interfaces**: Market, Alternative, Fundamental, Macro
+- **6 Analyzer interfaces**: NLP, LLM, Vision, Quant, Graph, Portfolio
+- **6 Strategy interfaces**: Screening, Due Diligence, Valuation, Risk, Thematic, Monitoring
+- **4 Core interfaces**: Repositories, Workflows
+
+See [Extending](extending.md) for how to implement these.
+
+## Benefits
+
+- ✅ **Testability**: All layers are easily testable
+- ✅ **Flexibility**: Swap implementations without changing business logic
+- ✅ **Maintainability**: Clear separation of concerns
+- ✅ **Extensibility**: Easy to add new features
