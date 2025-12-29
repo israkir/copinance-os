@@ -15,9 +15,13 @@ Create a `.env` file in your project root (same directory as `pyproject.toml`):
 COPINANCEOS_GEMINI_API_KEY=your-api-key-here
 ```
 
-## Gemini API Setup
+## LLM Provider Setup
 
-Required for agentic workflows.
+Copinance OS supports multiple LLM providers for agentic workflows. You can use either Gemini (cloud-based) or Ollama (local).
+
+### Gemini API (Cloud-based)
+
+Recommended for most users. Requires an API key.
 
 ### 1. Get API Key
 
@@ -41,7 +45,7 @@ export COPINANCEOS_GEMINI_API_KEY=your-api-key-here
 ### 3. Verify
 
 ```bash
-copinance research ask AAPL "What is the current price?"
+copinance research ask "What is the current price?" --symbol AAPL
 ```
 
 If configured correctly, you'll see AI analysis. If not, check:
@@ -80,8 +84,12 @@ COPINANCEOS_STORAGE_PATH=~/.copinanceos
 
 ## Complete .env Example
 
+**Using Gemini (Cloud):**
 ```bash
-# Gemini API (required for agentic workflows)
+# LLM Provider (optional, default: gemini)
+COPINANCEOS_LLM_PROVIDER=gemini
+
+# Gemini API (required for agentic workflows with Gemini)
 COPINANCEOS_GEMINI_API_KEY=AIzaSy...your-actual-key
 
 # Model selection (optional, default: gemini-1.5-pro)
@@ -90,6 +98,34 @@ COPINANCEOS_GEMINI_MODEL=gemini-1.5-pro
 # Storage (optional)
 COPINANCEOS_STORAGE_TYPE=file
 COPINANCEOS_STORAGE_PATH=~/.copinanceos
+```
+
+**Using Ollama (Local):**
+```bash
+# LLM Provider
+COPINANCEOS_LLM_PROVIDER=ollama
+
+# Ollama configuration (optional, defaults shown)
+COPINANCEOS_OLLAMA_BASE_URL=http://localhost:11434
+COPINANCEOS_OLLAMA_MODEL=llama2
+
+# Storage (optional)
+COPINANCEOS_STORAGE_TYPE=file
+COPINANCEOS_STORAGE_PATH=~/.copinanceos
+```
+
+**Mixed Configuration (per-workflow):**
+```bash
+# Use different providers for different workflows
+COPINANCEOS_WORKFLOW_LLM_PROVIDERS=static:ollama,agentic:gemini
+
+# Gemini API (for agentic workflows)
+COPINANCEOS_GEMINI_API_KEY=AIzaSy...your-actual-key
+COPINANCEOS_GEMINI_MODEL=gemini-1.5-pro
+
+# Ollama (for static workflows)
+COPINANCEOS_OLLAMA_BASE_URL=http://localhost:11434
+COPINANCEOS_OLLAMA_MODEL=llama2
 ```
 
 ## Security
@@ -119,4 +155,49 @@ pip install google-genai
 - Verify API key is set correctly
 - Check for typos in variable name
 - Ensure no quotes around the key value
+
+## Ollama Setup (Local LLM)
+
+Use Ollama to run LLMs locally without API keys. Great for privacy and cost savings.
+
+### 1. Install Ollama
+
+1. Download from [ollama.ai](https://ollama.ai)
+2. Install and start the Ollama service
+3. Pull a model: `ollama pull llama2` (or `mistral`, `codellama`, etc.)
+
+### 2. Configure
+
+**Option A: .env file (Recommended)**
+```bash
+# Set Ollama as the default provider
+COPINANCEOS_LLM_PROVIDER=ollama
+
+# Optional: Customize Ollama settings
+COPINANCEOS_OLLAMA_BASE_URL=http://localhost:11434
+COPINANCEOS_OLLAMA_MODEL=llama2
+```
+
+**Option B: Environment Variable**
+```bash
+export COPINANCEOS_LLM_PROVIDER=ollama
+export COPINANCEOS_OLLAMA_MODEL=llama2
+```
+
+### 3. Verify
+
+```bash
+copinance research ask "What is the current price?" --symbol AAPL
+```
+
+### Per-Workflow Provider Configuration
+
+You can use different providers for different workflows:
+
+```bash
+# Use Ollama for static workflows, Gemini for agentic
+COPINANCEOS_WORKFLOW_LLM_PROVIDERS=static:ollama,agentic:gemini
+```
+
+This allows you to use local models for simple tasks and cloud models for complex analysis.
 
