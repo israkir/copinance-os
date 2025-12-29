@@ -172,19 +172,29 @@ copinance research get <research-id>
 
 ### Ask Question (Agentic)
 
-Quick Q&A using agentic workflow.
+Quick Q&A using agentic workflow. Can ask questions about specific stocks or market-wide questions.
 
+**Stock-specific questions:**
 ```bash
-copinance research ask AAPL "What is the current price and P/E ratio?"
+copinance research ask "What is the current price and P/E ratio?" --symbol AAPL
+copinance research ask "What are the key risks for this stock?" --symbol TSLA
+```
+
+**Market-wide questions (no symbol needed):**
+```bash
+copinance research ask "What is the current market sentiment and which sectors are leading?"
+copinance research ask "What is the current VIX level and market fear sentiment?"
 ```
 
 **Options:**
+- `--symbol <symbol>` or `-s <symbol>`: Stock symbol (optional for market-wide questions)
 - `--timeframe <timeframe>`: `short_term`, `mid_term`, or `long_term` (default: `mid_term`)
 - `--profile-id <id>`: Profile ID for context (optional)
 
 **Note:**
-- Requires Gemini API key - see [Configuration](configuration)
+- Requires LLM provider configuration (Gemini API key or Ollama setup) - see [Configuration](configuration)
 - If no profile is provided and you don't have a current profile, you'll be prompted to set your financial literacy level for personalized analysis
+- For market-wide questions, omit the `--symbol` option
 
 ### Set Research Context
 
@@ -212,8 +222,18 @@ copinance research run AAPL --workflow static --timeframe mid_term
 ### Agentic Workflow
 
 ```bash
-# Ask a question (requires API key)
-copinance research ask AAPL "What are the key risks for this stock?"
+# Ask a stock-specific question (requires LLM provider configuration)
+copinance research ask "What are the key risks for this stock?" --symbol AAPL
+
+# Market regime analysis for a stock
+copinance research ask "What is the current market trend and volatility regime?" --symbol AAPL
+
+# Market-wide questions (no symbol needed)
+copinance research ask "What is the current market sentiment and which sectors are leading?"
+copinance research ask "What is the current VIX level and market fear sentiment?"
+
+# Combined stock and market analysis
+copinance research ask "Analyze this stock's regime and compare it to broader market conditions" --symbol AAPL
 ```
 
 ### Research Management

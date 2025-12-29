@@ -433,13 +433,42 @@ if result.data.get('parameters_adjusted'):
 
 ### Agentic Workflows
 
-Tools are automatically available in agentic workflows when a market data provider is configured:
+Tools are automatically available in agentic workflows when a market data provider is configured. The LLM will automatically select and use the appropriate tools based on your question.
 
+**Individual Stock Analysis:**
 ```bash
+# Analyze trend and volatility for a specific stock
 copinance research ask AAPL "What is the current market trend and volatility regime?"
+
+# Analyze market cycles
+copinance research ask TSLA "What market cycle phase is this stock in?"
+
+# Comprehensive regime analysis
+copinance research ask MSFT "Analyze the market regime for this stock including trend, volatility, and cycle phases"
 ```
 
-The LLM will automatically use the appropriate tools to answer your question.
+**Market-Wide Indicators:**
+```bash
+# Get market-wide context with VIX and sector analysis
+copinance research ask SPY "What is the current market sentiment and which sectors are leading?"
+
+# Analyze market breadth
+copinance research ask "What is the current market breadth and sector rotation?"
+
+# VIX and volatility analysis
+copinance research ask "What is the current VIX level and market fear sentiment?"
+
+# Sector rotation analysis
+copinance research ask "Which sectors are currently outperforming and what rotation theme is active?"
+```
+
+**Combined Analysis:**
+```bash
+# Combine individual stock and market-wide analysis
+copinance research ask AAPL "Analyze this stock's regime and compare it to the broader market conditions including VIX and sector rotation"
+```
+
+The LLM will automatically use the appropriate tools (`detect_market_trend`, `detect_volatility_regime`, `detect_market_cycles`, or `get_market_regime_indicators`) based on your question.
 
 ### Programmatic Usage
 
