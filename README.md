@@ -225,7 +225,28 @@ Copinance OS is designed as a **pure library** that integrates into any Python a
 - **Flexible persistence** - use in-memory, PostgreSQL, MongoDB, or any database
 - **Framework agnostic** - works with any Python web framework or application
 
-See [Getting Started](https://copinance.github.io/copinance-os/getting-started/quickstart) for detailed integration guides.
+### Library Integration Example
+
+```python
+from copinanceos.infrastructure.analyzers.llm.config import LLMConfig
+from copinanceos.infrastructure.containers import get_container
+
+# Configure LLM (required for agentic workflows)
+llm_config = LLMConfig(
+    provider="gemini",
+    api_key="your-api-key",
+    model="gemini-1.5-pro",
+)
+
+# Create container with configuration
+container = get_container(llm_config=llm_config)
+
+# Use the container
+use_case = container.get_stock_use_case()
+# ... integrate into your application
+```
+
+See [Configuration Guide](https://copinance.github.io/copinance-os/user-guide/configuration) for detailed integration examples and [Getting Started](https://copinance.github.io/copinance-os/getting-started/quickstart) for CLI usage.
 
 ## Contributing
 
