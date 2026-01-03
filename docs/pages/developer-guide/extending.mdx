@@ -86,10 +86,10 @@ class AlphaVantageProvider(MarketDataProvider):
 ### Step 3: Register in Container
 
 ```python
-from copinanceos.infrastructure.containers import Container
+from copinanceos.infrastructure.containers import get_container
 from dependency_injector import providers
 
-container = Container()
+container = get_container()
 container.market_data_provider.override(
     providers.Singleton(AlphaVantageProvider, api_key="your-key")
 )
@@ -118,7 +118,19 @@ class MyCustomAnalyzer(LLMAnalyzer):
 
 ### 2. Register in Container
 
-Similar to data providers, override the analyzer in your container.
+Similar to data providers, override the analyzer in your container:
+
+```python
+from copinanceos.infrastructure.containers import get_container
+from dependency_injector import providers
+
+container = get_container()
+container.llm_analyzer.override(
+    providers.Singleton(MyCustomAnalyzer)
+)
+```
+
+**Note:** If you're using LLM features, make sure to provide `LLMConfig` when creating the container. See [Configuration Guide](../user-guide/configuration#library-integration) for details.
 
 ## Adding a Custom Workflow
 
