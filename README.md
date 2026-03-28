@@ -33,7 +33,7 @@ Copinance OS is a **pure Python library** following clean hexagonal architecture
 copinanceos/
 ├── domain/              # Core business logic (no dependencies)
 │   ├── models/          # Entities: AnalysisProfile, Stock; Job (analysis execution context)
-│   └── ports/           # 22 interfaces for extensibility
+│   └── ports/           # 23 interfaces for extensibility
 ├── application/         # Use cases, default job runner (replaceable)
 │   ├── use_cases/       # Business operations
 │   └── run_job.py       # DefaultJobRunner (optional; implement JobRunner for custom orchestration)
@@ -127,6 +127,10 @@ python -m copinanceos.cli profile get <profile-id>
 python3 -m copinanceos.cli market search "Apple"
 python3 -m copinanceos.cli market quote AAPL
 python3 -m copinanceos.cli market history AAPL --start 2026-01-01 --end 2026-03-14
+
+# Options chain with BSM Greek columns (QuantLib; use --no-cache if Greeks are missing from cache)
+copinance market options SPY
+copinance market options AAPL -e 2026-06-19 --no-cache
 
 # One-off analysis (results saved to .copinance/results/v2/)
 python3 -m copinanceos.cli analyze equity AAPL --timeframe mid_term

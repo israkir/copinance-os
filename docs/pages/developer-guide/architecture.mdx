@@ -67,7 +67,9 @@ The public API is **analysis requests and use cases**; **Job** and **AnalysisExe
 ### Infrastructure Layer
 - **Implementations**: Concrete implementations of domain ports
 - **Repositories**: Data persistence (memory, file, database)
-- **Data Providers**: External data sources (yfinance, EDGAR, etc.)
+- **Data providers** (`infrastructure.data_providers`): Vendor-only adapters (yfinance, EDGAR, FRED)
+- **Market composition** (`infrastructure.market`): Composes a raw `MarketDataProvider` with derived option analytics without changing vendor modules
+- **Analytics** (`infrastructure.analytics`): Derived quantities (e.g. QuantLib BSM Greeks); see [Analytics](/analytics) in the docs (BSM & Greeks, chain metadata)
 - **Analysis executors**: Deterministic and question-driven execution (implement `AnalysisExecutor`)
 - **Container**: Dependency injection configuration
 
@@ -118,9 +120,10 @@ See [Using as a Library](/getting-started/library#configuration) for container c
 
 ## Extension Points
 
-The architecture provides 22 port interfaces for extension:
+The architecture provides 23 port interfaces for extension:
 
 - **5 Data Provider interfaces**: Market, Alternative, Fundamental, Macro, Base DataProvider
+- **1 Analytics port**: `OptionsChainGreeksEstimator` (options-chain BSM Greeks; default QuantLib implementation)
 - **1 Analyzer interface**: LLM
 - **6 Strategy interfaces**: Screening, Due Diligence, Valuation, Risk, Thematic, Monitoring
 - **4 Tool interfaces**: Tool, ToolParameter, ToolSchema, ToolResult
