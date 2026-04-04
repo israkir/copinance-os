@@ -96,6 +96,11 @@ class AnalyzeInstrumentRequest(BaseModel):
         False,
         description="Stream LLM tokens to stdout during question-driven runs (library/CLI)",
     )
+    run_id: str | None = Field(
+        None,
+        max_length=128,
+        description="Optional correlation id for progress streams and structured logs (HTTP/SSE clients)",
+    )
     no_cache: bool = Field(
         False,
         description="When True, skip tool/data cache reads and writes for this run",
@@ -174,6 +179,11 @@ class AnalyzeMarketRequest(BaseModel):
     stream: bool = Field(
         False,
         description="Stream LLM tokens to stdout during question-driven runs (library/CLI)",
+    )
+    run_id: str | None = Field(
+        None,
+        max_length=128,
+        description="Optional correlation id for progress streams and structured logs (HTTP/SSE clients)",
     )
     no_cache: bool = Field(
         False,

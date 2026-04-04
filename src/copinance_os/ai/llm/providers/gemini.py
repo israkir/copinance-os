@@ -28,7 +28,10 @@ from copinance_os.core.execution_engine.question_driven_tool_summary import (
     is_tool_call_json_text,
 )
 from copinance_os.core.pipeline.tools.tool_executor import ToolExecutor
+from copinance_os.core.progress.emit import maybe_emit_progress
+from copinance_os.domain.models.agent_progress import IterationStartedEvent
 from copinance_os.domain.models.llm_conversation import LLMConversationTurn
+from copinance_os.domain.ports.progress import ProgressSink
 from copinance_os.domain.ports.tools import Tool
 
 logger = structlog.get_logger(__name__)
@@ -637,6 +640,8 @@ class GeminiProvider(LLMProvider):
         stream: bool = False,
         on_stream_event: Callable[[LLMTextStreamEvent], Awaitable[None]] | None = None,
         prior_conversation: list[LLMConversationTurn] | None = None,
+        progress_sink: ProgressSink | None = None,
+        run_id: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Generate text with optional tool usage using Gemini function calling.
@@ -684,7 +689,7 @@ class GeminiProvider(LLMProvider):
             }
 
         # Create tool executor
-        executor = ToolExecutor(tools)
+        executor = ToolExecutor(tools, progress_sink=progress_sink, run_id=run_id)
 
         # Native multi-turn: prior user/model turns + current user task; system via config
         base_cfg = self._build_generation_config(temperature, max_tokens, **kwargs)
@@ -703,6 +708,15 @@ class GeminiProvider(LLMProvider):
 
         for iteration in range(max_iterations):
             try:
+                if progress_sink is not None and run_id is not None:
+                    await maybe_emit_progress(
+                        progress_sink,
+                        IterationStartedEvent(
+                            run_id=run_id,
+                            iteration=iteration + 1,
+                            max_iterations=max_iterations,
+                        ),
+                    )
                 logger.debug(
                     "Gemini tool calling iteration",
                     iteration=iteration + 1,
@@ -768,12 +782,17 @@ class GeminiProvider(LLMProvider):
                 # Execute function calls; then append model + user(tool feedback) for Gemini turns
                 tool_feedback_parts: list[str] = []
                 stop_suffix: str | None = None
-                for func_call in function_calls:
+                for call_idx, func_call in enumerate(function_calls):
                     tool_name = func_call["name"]
                     tool_args = func_call.get("args", {})
 
                     logger.info("Executing tool", tool_name=tool_name, args=tool_args)
-                    tool_result = await executor.execute_tool(tool_name, **tool_args)
+                    tool_result = await executor.execute_tool(
+                        tool_name,
+                        progress_iteration=iteration + 1,
+                        progress_call_index=call_idx,
+                        **tool_args,
+                    )
 
                     # Track this call for loop detection
                     sorted_items = tuple(sorted(tool_args.items()))

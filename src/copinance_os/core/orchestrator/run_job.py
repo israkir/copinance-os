@@ -11,6 +11,7 @@ import asyncio
 from typing import Any
 
 import structlog
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from copinance_os.domain.exceptions import (
     DataProviderUnavailableError,
@@ -71,52 +72,59 @@ class DefaultJobRunner(JobRunner):
     async def run(self, job: Job, context: dict[str, Any]) -> RunJobResult:
         executor = await self._find_executor(job)
         ctx = await self._build_context(job, context)
+        run_id = context.get("run_id")
+        if run_id is not None:
+            bind_contextvars(run_id=str(run_id), job_execution_type=job.execution_type)
         logger.info(
             "job_run_start",
             execution_type=job.execution_type,
             scope=job.scope.value,
         )
-        for attempt in range(self._max_execute_retries + 1):
-            try:
-                results = await executor.execute(job, ctx)
-                report = build_run_job_analysis_report(results) if results else None
-                report_exclusion: ReportExclusionReason | None = None
-                if results and report is None:
-                    et = results.get("execution_type")
-                    if et and et not in _REPORT_ENVELOPE_EXECUTION_TYPES:
-                        report_exclusion = ReportExclusionReason.UNKNOWN_EXECUTOR_TYPE
-                logger.info(
-                    "job_run_success",
-                    execution_type=job.execution_type,
-                    attempt=attempt,
-                )
-                return RunJobResult(
-                    success=True,
-                    results=results,
-                    error_message=None,
-                    report=report,
-                    report_exclusion_reason=report_exclusion,
-                )
-            except DomainError as e:
-                if attempt < self._max_execute_retries and isinstance(
-                    e, self._retryable_exceptions
-                ):
-                    delay = 0.5 * (2**attempt)
-                    logger.warning(
-                        "job_execute_retry",
+        try:
+            for attempt in range(self._max_execute_retries + 1):
+                try:
+                    results = await executor.execute(job, ctx)
+                    report = build_run_job_analysis_report(results) if results else None
+                    report_exclusion: ReportExclusionReason | None = None
+                    if results and report is None:
+                        et = results.get("execution_type")
+                        if et and et not in _REPORT_ENVELOPE_EXECUTION_TYPES:
+                            report_exclusion = ReportExclusionReason.UNKNOWN_EXECUTOR_TYPE
+                    logger.info(
+                        "job_run_success",
                         execution_type=job.execution_type,
-                        attempt=attempt + 1,
-                        max_attempts=self._max_execute_retries + 1,
-                        delay_s=delay,
-                        error=str(e),
+                        attempt=attempt,
                     )
-                    await asyncio.sleep(delay)
-                    continue
-                return RunJobResult(success=False, results=None, error_message=str(e))
-            except Exception as e:
-                return RunJobResult(
-                    success=False,
-                    results=None,
-                    error_message=f"Analysis execution failed: {e!s}",
-                )
-        raise RuntimeError("job run loop exited without result")
+                    return RunJobResult(
+                        success=True,
+                        results=results,
+                        error_message=None,
+                        report=report,
+                        report_exclusion_reason=report_exclusion,
+                    )
+                except DomainError as e:
+                    if attempt < self._max_execute_retries and isinstance(
+                        e, self._retryable_exceptions
+                    ):
+                        delay = 0.5 * (2**attempt)
+                        logger.warning(
+                            "job_execute_retry",
+                            execution_type=job.execution_type,
+                            attempt=attempt + 1,
+                            max_attempts=self._max_execute_retries + 1,
+                            delay_s=delay,
+                            error=str(e),
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    return RunJobResult(success=False, results=None, error_message=str(e))
+                except Exception as e:
+                    return RunJobResult(
+                        success=False,
+                        results=None,
+                        error_message=f"Analysis execution failed: {e!s}",
+                    )
+            raise RuntimeError("job run loop exited without result")
+        finally:
+            if run_id is not None:
+                unbind_contextvars("run_id", "job_execution_type")

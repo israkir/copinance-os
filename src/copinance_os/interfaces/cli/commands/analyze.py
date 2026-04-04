@@ -102,6 +102,7 @@ async def analyze_equity(
         profile_id=final_profile_id,
         include_prompt_in_results=include_prompt_in_results,
         stream=stream_flag,
+        run_id=None,
         no_cache=no_cache,
     )
     try:
@@ -184,6 +185,7 @@ async def analyze_options(
         profile_id=final_profile_id,
         include_prompt_in_results=include_prompt_in_results,
         stream=stream_flag,
+        run_id=None,
         no_cache=no_cache,
     )
     try:
@@ -348,6 +350,7 @@ async def analyze_macro(
         profile_id=final_profile_id,
         include_prompt_in_results=include_prompt_in_results,
         stream=stream_flag,
+        run_id=None,
         no_cache=no_cache,
     )
     try:

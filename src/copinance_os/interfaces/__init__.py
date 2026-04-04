@@ -1,1 +1,1 @@
-"""User-facing interfaces (CLI, future HTTP API)."""
+"""User-facing interfaces (CLI entrypoint and commands)."""

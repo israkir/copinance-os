@@ -1,0 +1,130 @@
+# Agent progress & chat integration (client guideline)
+
+This document is for **teams embedding Copinance OS** in a product (web app, desktop, or internal tools) that need **live phases**, **tool visibility**, and **streaming assistant text** in a chat-style UI. Pass it to frontend and backend engineers integrating against the Python library.
+
+Copinance OS exposes a **typed event stream** and **job context hooks**. It does **not** ship a hosted HTTP API or chat UI—you implement transport (HTTP/SSE/WebSocket), auth, and persistence.
+
+---
+
+## 1. What you implement vs what the library provides
+
+| You (client / gateway) | Copinance OS (library) |
+|------------------------|------------------------|
+| User authentication, sessions, rate limits | `ResearchOrchestrator`, `Job`, executors, tools |
+| Chat transcript storage and UI | Question-driven analysis, `RunJobResult`, optional `AnalysisReport` |
+| HTTP/SSE/WebSocket and JSON framing | `ProgressSink.emit(event)`, Pydantic **`AgentProgressEvent`** union |
+| Mapping `run_id` to your session/message ids | Emits structured events with **`run_id`** on each payload |
+| Cancelling work when the user leaves | Async task running `run_job`; cancel the task |
+
+---
+
+## 2. Entry points for “chat + agent progress”
+
+Use **question-driven** analysis (natural-language `question` with a resolved mode of `question_driven`, or explicit `AnalyzeMode.QUESTION_DRIVEN`).
+
+**Typical flow:**
+
+1. Build **`AnalyzeInstrumentRequest`** or **`AnalyzeMarketRequest`** (or construct **`Job`** + **context** `dict` yourself—the runners do this for you).
+2. Set a stable **`run_id`** (string, ≤128 chars recommended): your chat turn id, correlation id, or UUID string.
+3. Pass **`stream=True`** in the request or in **`run_job(..., context)`** if you want **LLM token deltas** multiplexed into progress (see §5).
+4. Provide a **`ProgressSink`** implementation and pass it as **`context["progress_sink"]`** when calling **`ResearchOrchestrator.run_job(job, context)`** (or extend runners to accept it if you wrap the default runners).
+
+**Multi-turn chat:** use **`conversation_history`** on the analyze requests (alternating user/assistant dicts, ending with assistant; the new user message is **`question`**). See the main [Using as a Library](../getting-started/library) guide.
+
+---
+
+## 3. The `ProgressSink` contract
+
+Implement **`copinance_os.domain.ports.progress.ProgressSink`**:
+
+```python
+async def emit(self, event: AgentProgressEvent) -> None: ...
+```
+
+- **Must be non-blocking** for the event loop: forward to a queue, websocket send, or buffer; do not run heavy sync I/O inside `emit`.
+- **May raise** only in exceptional cases; prefer logging and continuing so a bad UI bridge does not kill analysis.
+
+**Minimal bridge (queue):** dequeue in your HTTP layer and serialize each event to JSON for SSE/WebSocket clients.
+
+---
+
+## 4. Event model (discriminate on `kind`)
+
+Every event includes **`schema_version`** (integer, currently **1**) and **`kind`**. Parse JSON with **`copinance_os.domain.models.agent_progress.parse_agent_progress_event`** if you need server-side validation.
+
+| `kind` | Purpose |
+|--------|---------|
+| `run_started` | Run accepted; includes `execution_type`, optional `symbol` / `market_index`. |
+| `run_failed` | Validation or configuration failure before or during run (short `error_message`). |
+| `gathering_context` | Phases such as `building_prompts`, `loading_tools`, `aggregating` (+ optional `detail`). |
+| `synthesis_phase` | `started` / `completed` around final narrative synthesis (provider-dependent). |
+| `iteration_started` | New agent loop iteration: `iteration`, `max_iterations` (1-based). |
+| `llm_stream` | Token stream mirror: `stream_kind` = `text_delta` \| `done` \| `error` \| `rollback`. On **`rollback`**, discard displayed tokens for the current turn in the UI—tool calls follow. |
+| `tool_started` | `tool_name`, **`args_summary`** (bounded string, not full raw JSON). |
+| `tool_finished` | `success`, **`duration_ms`**, **`result_summary`** (truncated). |
+| `run_completed` | Successful completion of the executor path (`success` true); final business payload is still **`RunJobResult`** from `run_job`. |
+
+**Forward-compatibility:** if you add a client-side parser, **ignore unknown `kind` values** or stash them for logging—new kinds may appear in future library versions.
+
+---
+
+## 5. Streaming assistant text (`llm_stream` vs final answer)
+
+- With **`stream=True`**, the library emits **`llm_stream`** events with **`stream_kind="text_delta"`** for partial assistant text.
+- **`rollback`**: the model started answering but then issued tool calls; UI should **clear the provisional assistant bubble** for that turn and wait for the next deltas after tools return.
+- The **authoritative** assistant message for persistence is still the completed analysis text in **`RunJobResult.results`** (e.g. `analysis`, `conversation_turns` when present)—not a blind concat of deltas if you reset on rollback.
+
+---
+
+## 6. Correlation and logging
+
+If **`run_id`** is present in **`run_job` context**, **`DefaultJobRunner`** binds **`run_id`** and **`job_execution_type`** into **structlog** context for the duration of the run. Align your gateway logs with the same **`run_id`** for support and tracing.
+
+---
+
+## 7. Security and privacy expectations
+
+- **Tool args and results** in events are **summarised or truncated** for UI; do not treat them as authoritative for compliance. Full data lives in tool execution and **`RunJobResult`** server-side.
+- **Do not** expose raw prompts, full SEC payloads, or user PII to the browser by default.
+- Treat **user questions** as untrusted input (prompt injection): display-only; do not auto-execute anything based on model output outside your policy.
+
+---
+
+## 8. Versioning
+
+- **`schema_version`** on each event: bump in **breaking** changes to the library’s event shapes.
+- **`AGENT_PROGRESS_SCHEMA_VERSION`** in **`copinance_os.domain.models.agent_progress`**: global constant for documentation; clients can log or gate UI on it.
+
+When upgrading the **`copinance-os`** package, re-read this page and the [Architecture](../developer-guide/architecture) package tree for changes.
+
+---
+
+## 9. Cancellation
+
+Bind the **asyncio task** that runs **`await orchestrator.run_job(...)`** to your request lifecycle. On client disconnect or timeout, **cancel the task** so the model loop and tools do not run unbounded.
+
+---
+
+## 10. Checklist for new UI features
+
+When you add **timelines, steppers, or tool badges** in the client:
+
+1. Subscribe to **`ProgressSink`** (or your queue fed by it).
+2. Key all UI state by **`run_id`** so parallel chats do not cross streams.
+3. Handle **`llm_stream.rollback`** explicitly.
+4. After `run_completed`, fetch **`RunJobResult`** from the same `run_job` await (your code already has it)—sync final message and metadata from **`results`** / **`report`**, not only from streamed deltas.
+5. For **new event kinds** added in a future library release, either upgrade the client or safely ignore unknown kinds.
+
+---
+
+## 11. Where to look in the codebase (reference)
+
+| Item | Location |
+|------|----------|
+| Event union + `parse_agent_progress_event` | `copinance_os.domain.models.agent_progress` |
+| `ProgressSink` | `copinance_os.domain.ports.progress` |
+| Orchestration entry | `copinance_os.core.orchestrator.research_orchestrator.ResearchOrchestrator.run_job` |
+| Question-driven executor (emits phases + multiplexes stream) | `copinance_os.core.execution_engine.question_driven_analysis` |
+| Tool timing + summaries | `copinance_os.core.pipeline.tools.tool_executor` |
+
+For gateway responsibilities (auth, tenancy, keys), see [Using as a Library — Gateway, chat UI, and agent progress](../getting-started/library#gateway-chat-ui-and-agent-progress).

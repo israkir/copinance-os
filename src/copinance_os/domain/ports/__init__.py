@@ -16,6 +16,7 @@ from copinance_os.domain.ports.data_providers import (
     MacroeconomicDataProvider,
     MarketDataProvider,
 )
+from copinance_os.domain.ports.progress import ProgressSink
 from copinance_os.domain.ports.repositories import (
     AnalysisProfileRepository,
     StockRepository,
@@ -68,4 +69,5 @@ __all__ = [
     "ToolParameter",
     "ToolResult",
     "ToolSchema",
+    "ProgressSink",
 ]
