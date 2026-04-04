@@ -32,7 +32,10 @@ from copinance_os.core.execution_engine.question_driven_tool_summary import (
     is_tool_call_json_text,
 )
 from copinance_os.core.pipeline.tools.tool_executor import ToolExecutor
+from copinance_os.core.progress.emit import maybe_emit_progress
+from copinance_os.domain.models.agent_progress import IterationStartedEvent
 from copinance_os.domain.models.llm_conversation import LLMConversationTurn
+from copinance_os.domain.ports.progress import ProgressSink
 from copinance_os.domain.ports.tools import Tool
 
 logger = structlog.get_logger(__name__)
@@ -396,6 +399,8 @@ class OpenAIProvider(LLMProvider):
         stream: bool = False,
         on_stream_event: Callable[[LLMTextStreamEvent], Awaitable[None]] | None = None,
         prior_conversation: list[LLMConversationTurn] | None = None,
+        progress_sink: ProgressSink | None = None,
+        run_id: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         if not OPENAI_AVAILABLE:
@@ -422,7 +427,7 @@ class OpenAIProvider(LLMProvider):
                 "llm_synthesis_error": None,
             }
 
-        executor = ToolExecutor(tools)
+        executor = ToolExecutor(tools, progress_sink=progress_sink, run_id=run_id)
         oai_tools = _openai_tool_definitions(executor)
         messages = self._build_messages(system_prompt, prior_conversation, prompt)
 
@@ -435,6 +440,15 @@ class OpenAIProvider(LLMProvider):
 
         for iteration in range(max_iterations):
             try:
+                if progress_sink is not None and run_id is not None:
+                    await maybe_emit_progress(
+                        progress_sink,
+                        IterationStartedEvent(
+                            run_id=run_id,
+                            iteration=iteration + 1,
+                            max_iterations=max_iterations,
+                        ),
+                    )
                 use_stream = bool(stream and on_stream_event is not None)
                 logger.debug(
                     "OpenAI tool calling iteration",
@@ -501,7 +515,7 @@ class OpenAIProvider(LLMProvider):
                 messages.append(assistant_msg)
 
                 tool_feedback_stop: str | None = None
-                for tc_dict in tool_call_dicts:
+                for call_idx, tc_dict in enumerate(tool_call_dicts):
                     parsed_one = _parse_function_calls_from_tool_calls([tc_dict], executor)
                     if not parsed_one:
                         fn = tc_dict.get("function") or {}
@@ -527,7 +541,12 @@ class OpenAIProvider(LLMProvider):
                     tc_id = func_call.get("_tool_call_id") or tc_dict.get("id", "")
 
                     logger.info("Executing tool", tool_name=tool_name, args=tool_args)
-                    tool_result = await executor.execute_tool(tool_name, **tool_args)
+                    tool_result = await executor.execute_tool(
+                        tool_name,
+                        progress_iteration=iteration + 1,
+                        progress_call_index=call_idx,
+                        **tool_args,
+                    )
 
                     sorted_items = tuple(sorted(tool_args.items()))
                     recent_tool_calls.append((tool_name, sorted_items))

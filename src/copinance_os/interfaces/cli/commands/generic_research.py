@@ -49,6 +49,7 @@ async def run_generic_research(
         profile_id=final_profile_id,
         include_prompt_in_results=include_prompt_in_results,
         stream=stream and not json_output,
+        run_id=None,
         no_cache=False,
     )
     try:

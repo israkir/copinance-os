@@ -41,7 +41,7 @@ Copinance OS follows **clean (hexagonal) architecture** with strict boundaries: 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Optional **`interfaces/api`** (FastAPI) lives next to **`interfaces/cli`** and requires the `api` extra (`pip install -e ".[api]"`). There are no `domain/portfolio` or `domain/risk` packages — implement those against `domain.ports` and wire them in `infra/di` like any other adapter.
+There are no `domain/portfolio` or `domain/risk` packages — implement those against `domain.ports` and wire them in `infra/di` like any other adapter.
 
 ## Package tree (source)
 
@@ -88,7 +88,6 @@ copinance_os/
 │   ├── di/                             # Container, use cases, repositories, providers (wires AnalysisExecutorFactory)
 │   └── plugins/                        # Load plugin specs (YAML/JSON) → callable registries
 ├── interfaces/
-│   ├── api/                            # Optional minimal FastAPI app (requires `pip install -e ".[api]"`)
 │   └── cli/                            # `__main__`→`main`; `dispatch/` (Typer vs generic research); `root` (lazy Typer); `commands/`; `shared/`
 └── research/
     ├── reports/                        # Re-exports of domain report builders
@@ -108,7 +107,6 @@ copinance_os/
 | `copinance_os.ai.llm` | LLM provider adapters, configuration, prompt resources. |
 | `copinance_os.infra.di` | Dependency injection: `get_container()`, lazy container proxy, singletons. |
 | `copinance_os.interfaces.cli` | Console script → **`main`**: **`dispatch.parse_root_argv`** (Typer vs generic research), lazy Typer **`root`**, **`commands/*`**. |
-| `copinance_os.interfaces.api` | Optional **`create_app`** FastAPI factory (requires `api` extra). |
 | `copinance_os.research.reports` | Re-exports of domain report builders for research-facing imports. |
 
 ## Vocabulary

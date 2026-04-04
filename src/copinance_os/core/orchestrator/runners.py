@@ -47,6 +47,8 @@ class DefaultAnalyzeInstrumentRunner(AnalyzeInstrumentRunner):
             "stream": request.stream,
             "no_cache": request.no_cache,
         }
+        if request.run_id is not None:
+            context["run_id"] = request.run_id
         if request.conversation_history:
             context["conversation_history"] = [t.model_dump() for t in request.conversation_history]
         return await self._orchestrator.run_job(job, context)
@@ -91,6 +93,8 @@ class DefaultAnalyzeMarketRunner(AnalyzeMarketRunner):
             "stream": request.stream,
             "no_cache": request.no_cache,
         }
+        if request.run_id is not None:
+            context["run_id"] = request.run_id
         if request.conversation_history:
             context["conversation_history"] = [t.model_dump() for t in request.conversation_history]
         return await self._orchestrator.run_job(job, context)

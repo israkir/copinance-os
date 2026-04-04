@@ -12,6 +12,7 @@ This guide is for developers who want to integrate Copinance OS into their own P
 - [Quick Start: Run an Analysis](#quick-start-run-an-analysis)
 - [Configuration](#configuration)
 - [Running analysis (ResearchOrchestrator)](#running-analysis-researchorchestrator)
+- [Gateway, chat UI, and agent progress](#gateway-chat-ui-and-agent-progress)
 - [Using Use Cases Directly](#using-use-cases-directly)
 - [Library API Reference](#library-api-reference) — **container entry points, request/response types, all options**
 - [Analysis Profiles](#analysis-profiles)
@@ -334,8 +335,8 @@ Built-in executors read mode-specific options from the **context** dict (second 
 
 - **`deterministic_instrument_analysis`** — Instrument scope, deterministic equity/options analysis. Context may include `expiration_date` and `option_side` for options.
 - **`deterministic_market_analysis`** — Market scope, deterministic macro regime dashboard. Context includes `market_index`, `lookback_days`, and `include_*` booleans.
-- **`question_driven_instrument_analysis`** — Instrument scope, tool-using analysis; requires `LLMConfig`. Context includes `question`, optional **`conversation_history`** (list of `{"role","content"}` dicts: alternating user/assistant, ending with assistant), optional options context, `stream`, and `include_prompt`.
-- **`question_driven_market_analysis`** — Market scope, tool-using analysis; requires `LLMConfig`. Context includes `question`, optional **`conversation_history`** (same shape), `market_index`, `stream`, and `include_prompt`.
+- **`question_driven_instrument_analysis`** — Instrument scope, tool-using analysis; requires `LLMConfig`. Context includes `question`, optional **`conversation_history`** (list of `{"role","content"}` dicts: alternating user/assistant, ending with assistant), optional options context, `stream`, optional **`run_id`** (correlation for logs and UI), optional **`progress_sink`** (see [Gateway, chat UI, and agent progress](#gateway-chat-ui-and-agent-progress)), and `include_prompt`.
+- **`question_driven_market_analysis`** — Market scope, tool-using analysis; requires `LLMConfig`. Context includes `question`, optional **`conversation_history`** (same shape), `market_index`, `stream`, optional **`run_id`**, optional **`progress_sink`**, and `include_prompt`.
 
 ### Example: deterministic and question-driven jobs
 
@@ -403,6 +404,44 @@ result = await orchestrator.run_job(job_equity, {})
 ```
 
 All analysis execution is **async**; use `asyncio.run()` or run inside an async framework.
+
+---
+
+## Gateway, chat UI, and agent progress
+
+Copinance OS is a **library**, not an HTTP server. If you expose analysis to multiple users (e.g. a chat UI), put **authentication, tenancy, rate limits, and LLM API keys** in your own gateway or BFF—not inside `domain/`.
+
+| Concern | Recommended approach |
+|--------|----------------------|
+| **Identity** | Validate JWT/OAuth/session in your gateway; map users to `profile_id` (or pass `None`). |
+| **Isolation** | Scope storage/cache keys per tenant or user; do not share mutable request state across users. |
+| **LLM keys** | Configure `LLMConfig` / env per deployment or tenant; never embed keys in client payloads. |
+| **Rate limiting** | Enforce before `ResearchOrchestrator.run_job`. |
+| **Transport** | Use your framework’s HTTP/SSE/WebSocket; serialize progress from a `ProgressSink` (see `copinance_os.domain.models.agent_progress`). |
+| **Cancellation** | Cancel the asyncio task when the client disconnects. |
+| **Secrets** | Do not log full tool args, prompts, or PII; progress events are summarised but still sensitive. |
+
+**Correlation:** pass optional **`run_id`** on `AnalyzeInstrumentRequest` / `AnalyzeMarketRequest`, or in `run_job(..., context)`, so logs and UI match your chat session. When `run_id` is set, `DefaultJobRunner` binds `run_id` and `job_execution_type` into structlog context for the run.
+
+**Structured progress:** implement **`ProgressSink`** (`copinance_os.domain.ports.progress`) and pass **`progress_sink`** in the job context (same place as `stream` for token streaming). Example queue-backed sink for bridging to your transport:
+
+```python
+import asyncio
+
+from copinance_os.domain.models.agent_progress import AgentProgressEvent
+
+
+class QueueProgressSink:
+    def __init__(self, queue: asyncio.Queue[AgentProgressEvent]) -> None:
+        self._queue = queue
+
+    async def emit(self, event: AgentProgressEvent) -> None:
+        await self._queue.put(event)
+```
+
+Wire `QueueProgressSink()` as `context["progress_sink"]` with `stream=True` for question-driven runs. Use **`LLMProvider`** via the container—do not import vendor LLM SDKs from application/gateway code.
+
+**A fuller client checklist** (event kinds, rollback, versioning, cancellation) is in the developer guide: [Agent progress & chat integration (clients)](../developer-guide/agent-progress-client-integration).
 
 ---
 
@@ -729,7 +768,7 @@ The **`.copinance`** directory (e.g. `data/`, `equities.json`) is created by the
 
 **Default behavior:** Storage is file-based (settings `COPINANCEOS_STORAGE_TYPE=file`, `COPINANCEOS_STORAGE_PATH=.copinance`), so the CLI and any code using the default container will create `.copinance` on disk unless overridden.
 
-**To avoid creating `.copinance` when integrating the library** (e.g. in a FastAPI backend where you want no on-disk usage):
+**To avoid creating `.copinance` when integrating the library** (e.g. in a web backend where you want no on-disk usage):
 
 - **In code:** Pass `storage_type="memory"` to `get_container()`. Repositories then use in-memory storage and no directory is created. You can also pass `cache_enabled=False` if you want every request to use fresh data.
 

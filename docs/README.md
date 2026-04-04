@@ -12,7 +12,6 @@ The docs track the `copinance_os` package:
 - **AI/LLM** — provider adapters (Gemini, OpenAI, Ollama), streaming, tool-calling loop
 - **Infra** — DI container, plugin loading, settings
 - **Interfaces/CLI** — `main` → `dispatch` (Typer vs natural-language root); `--json` and `--stream` flags; multi-turn conversation (library-only via `conversation_history`)
-- **Interfaces/API** — optional FastAPI (`pip install -e ".[api]"`)
 
 Deterministic finance stays in `data` and `domain`; LLMs explain and route, they do not replace pricing engines. The canonical package tree is in [Architecture](https://copinance.github.io/copinance-os/developer-guide/architecture#package-tree-source).
 

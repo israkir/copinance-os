@@ -1,6 +1,8 @@
 """Question-driven analysis executor implementation."""
 
 import json
+import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -11,10 +13,20 @@ from copinance_os.ai.llm.resources import (
     ANALYZE_QUESTION_DRIVEN_PROMPT_NAME,
     PromptManager,
 )
+from copinance_os.ai.llm.streaming import LLMTextStreamEvent
 from copinance_os.core.execution_engine.base import BaseAnalysisExecutor
 from copinance_os.core.execution_engine.llm_stream_stdout import stdout_llm_stream_handler
 from copinance_os.core.pipeline.tools.context_tools import GetCurrentDateTool
 from copinance_os.core.pipeline.tools.discovery import collect_question_driven_tools
+from copinance_os.core.progress.emit import maybe_emit_progress
+from copinance_os.domain.models.agent_progress import (
+    GatheringContextEvent,
+    LlmStreamProgressEvent,
+    RunCompletedEvent,
+    RunFailedEvent,
+    RunStartedEvent,
+    SynthesisPhaseEvent,
+)
 from copinance_os.domain.models.analysis import (
     INSTRUMENT_QUESTION_DRIVEN_TYPE,
     MARKET_QUESTION_DRIVEN_TYPE,
@@ -29,9 +41,18 @@ from copinance_os.domain.ports.data_providers import (
     MacroeconomicDataProvider,
     MarketDataProvider,
 )
+from copinance_os.domain.ports.progress import ProgressSink
 from copinance_os.domain.ports.tools import Tool
 
 logger = structlog.get_logger(__name__)
+
+
+def _truncate_run_message(message: str, max_len: int = 500) -> str:
+    message = message.strip()
+    if len(message) <= max_len:
+        return message
+    return message[: max_len - 3] + "..."
+
 
 QUESTION_ANALYSIS_PROMPT_CACHE_NAME = "question_analysis_prompt"
 
@@ -111,6 +132,17 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
         effective_tool_cache = None if no_cache else self._cache_manager
 
         results: dict[str, Any] = {}
+        run_id = str(context.get("run_id") or uuid.uuid4())
+        results["run_id"] = run_id
+        progress_sink: ProgressSink | None = context.get("progress_sink")
+
+        async def emit_run_failed(message: str) -> None:
+            if progress_sink is None:
+                return
+            await maybe_emit_progress(
+                progress_sink,
+                RunFailedEvent(run_id=run_id, error_message=_truncate_run_message(message)),
+            )
 
         # Check if LLM analyzer is available
         if self._llm_analyzer is None:
@@ -118,6 +150,7 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
             results["error"] = "LLM analyzer not configured"
             results["message"] = "LLM analyzer is required for question-driven analysis"
             logger.warning("Question-driven analysis executed without LLM analyzer")
+            await emit_run_failed(results["message"])
             return results
 
         # Get LLM provider from analyzer
@@ -133,6 +166,7 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
             logger.warning(
                 "LLM provider does not support tools", provider=llm_provider.get_provider_name()
             )
+            await emit_run_failed(results["message"])
             return results
 
         # Create tools: always include current-date tool so LLM can get today's date
@@ -172,6 +206,7 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
                 "At least one data provider is required for question-driven analysis"
             )
             logger.warning("No tools available for question-driven analysis")
+            await emit_run_failed(results["message"])
             return results
 
         # Validate that question is provided
@@ -183,6 +218,7 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
                 f"A question is required for question-driven analysis. What is your question about {symbol}?"
             )
             logger.warning("Question-driven analysis executed without question", symbol=symbol)
+            await emit_run_failed(results["message"])
             return results
 
         try:
@@ -192,6 +228,7 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
             results["error"] = "Invalid conversation_history"
             results["message"] = str(e)
             logger.warning("Invalid conversation history", error=str(e))
+            await emit_run_failed(results["message"])
             return results
 
         conversation_history_digest = (
@@ -269,6 +306,39 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
                     **cache_kw,
                 )
 
+        if progress_sink is not None:
+            inst_sym = job.instrument_symbol.upper() if job.instrument_symbol else None
+            mkt_idx = job.market_index.upper() if job.market_index else None
+            await maybe_emit_progress(
+                progress_sink,
+                RunStartedEvent(
+                    run_id=run_id,
+                    execution_type=job.execution_type,
+                    symbol=inst_sym,
+                    market_index=mkt_idx,
+                ),
+            )
+            await maybe_emit_progress(
+                progress_sink,
+                GatheringContextEvent(
+                    run_id=run_id,
+                    phase="loading_tools",
+                    detail=f"{len(tools)} tools",
+                ),
+            )
+            await maybe_emit_progress(
+                progress_sink,
+                GatheringContextEvent(
+                    run_id=run_id,
+                    phase="building_prompts",
+                    detail="prompts ready",
+                ),
+            )
+            await maybe_emit_progress(
+                progress_sink,
+                SynthesisPhaseEvent(run_id=run_id, phase="started"),
+            )
+
         logger.info(
             "Executing question-driven analysis with tools",
             symbol=symbol,
@@ -277,9 +347,60 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
         )
 
         stream = bool(context.get("stream"))
-        on_stream = context.get("on_llm_stream")
-        if stream and on_stream is None:
-            on_stream = stdout_llm_stream_handler
+        raw_on_stream = context.get("on_llm_stream")
+        if stream and raw_on_stream is None and progress_sink is None:
+            raw_on_stream = stdout_llm_stream_handler
+
+        async def _multiplex_llm_stream(ev: LLMTextStreamEvent) -> None:
+            if progress_sink is not None:
+                sk = ev.kind
+                if sk == "text_delta":
+                    await maybe_emit_progress(
+                        progress_sink,
+                        LlmStreamProgressEvent(
+                            run_id=run_id,
+                            stream_kind="text_delta",
+                            text_delta=ev.text_delta,
+                            error_message=None,
+                            native_streaming=ev.native_streaming,
+                        ),
+                    )
+                elif sk == "done":
+                    await maybe_emit_progress(
+                        progress_sink,
+                        LlmStreamProgressEvent(
+                            run_id=run_id,
+                            stream_kind="done",
+                            native_streaming=ev.native_streaming,
+                        ),
+                    )
+                elif sk == "error":
+                    await maybe_emit_progress(
+                        progress_sink,
+                        LlmStreamProgressEvent(
+                            run_id=run_id,
+                            stream_kind="error",
+                            error_message=ev.error_message,
+                            native_streaming=ev.native_streaming,
+                        ),
+                    )
+                elif sk == "rollback":
+                    await maybe_emit_progress(
+                        progress_sink,
+                        LlmStreamProgressEvent(
+                            run_id=run_id,
+                            stream_kind="rollback",
+                            native_streaming=ev.native_streaming,
+                        ),
+                    )
+            if raw_on_stream is not None:
+                await raw_on_stream(ev)
+
+        on_stream: Callable[[LLMTextStreamEvent], Awaitable[None]] | None
+        if stream and (raw_on_stream is not None or progress_sink is not None):
+            on_stream = _multiplex_llm_stream
+        else:
+            on_stream = raw_on_stream
 
         # Execute LLM with tools
         llm_result = await llm_provider.generate_with_tools(
@@ -291,6 +412,8 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
             stream=stream,
             on_stream_event=on_stream if stream else None,
             prior_conversation=prior_turns if prior_turns else None,
+            progress_sink=progress_sink,
+            run_id=run_id,
         )
 
         # Extract results
@@ -333,6 +456,24 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
             iterations=results["iterations"],
             tools_used_count=len(results["tools_used"]),
         )
+
+        if progress_sink is not None:
+            await maybe_emit_progress(
+                progress_sink,
+                SynthesisPhaseEvent(run_id=run_id, phase="completed"),
+            )
+            await maybe_emit_progress(
+                progress_sink,
+                GatheringContextEvent(
+                    run_id=run_id,
+                    phase="aggregating",
+                    detail="results assembled",
+                ),
+            )
+            await maybe_emit_progress(
+                progress_sink,
+                RunCompletedEvent(run_id=run_id, success=True),
+            )
 
         return results
 
