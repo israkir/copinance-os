@@ -146,7 +146,7 @@ container.llm_analyzer.override(
 )
 ```
 
-**Note:** If you're using LLM features, make sure to provide `LLMConfig` when creating the container. See [Configuration](/getting-started/configuration#library-integration) for details.
+**Note:** If you're using LLM features, make sure to provide `LLMConfig` when creating the container. See [Configuration](../getting-started/configuration#library-integration) for details.
 
 ### LLM backends: text streaming
 
@@ -155,7 +155,7 @@ Built-in **`GeminiProvider`**, **`OpenAIProvider`**, and **`OllamaProvider`** su
 - Implement **`_iter_native_text_stream`** and return **`True`** from **`supports_native_text_stream()`** when the remote API supports streaming, or
 - Rely on the base **`generate_text_stream`** logic: **`auto`** / **`buffered`** will call **`generate_text`** only.
 
-Events are **`LLMTextStreamEvent`** (Pydantic) with **`kind`**, **`text_delta`**, **`native_streaming`**, and optional **`usage`**. See [Library — LLM text streaming](/getting-started/library#llm-text-streaming-library--llmprovider).
+Events are **`LLMTextStreamEvent`** (Pydantic) with **`kind`**, **`text_delta`**, **`native_streaming`**, and optional **`usage`**. See [Library — LLM text streaming](../getting-started/library#llm-text-streaming-library--llmprovider).
 
 ## Adding a Custom Executor
 
@@ -191,7 +191,7 @@ Stock wiring builds the executor list with **`AnalysisExecutorFactory.create_all
 
 Question-driven (and other LLM) analysis resolves prompts through a **PromptManager**. When using the library you can supply your own templates; if you do not, built-in package prompts are used.
 
-**Template format:** Each template is an object with two string fields: `system_prompt` and `user_prompt`. Use `{variable_name}` placeholders for substitution; escape literal braces as `{{` and `}}`. See [Prompt template format](/getting-started/library#prompt-template-format) in the library guide for the full spec and question-driven prompt variables.
+**Template format:** Each template is an object with two string fields: `system_prompt` and `user_prompt`. Use `{variable_name}` placeholders for substitution; escape literal braces as `{{` and `}}`. See [Prompt template format](../getting-started/library#prompt-template-format) in the library guide for the full spec and question-driven prompt variables.
 
 - **Overlay via `get_container()`:** Pass `prompt_templates={ "analyze_question_driven": { "system_prompt": "...", "user_prompt": "..." } }`. Only the keys you provide are overridden; the rest use package defaults.
 - **Custom `PromptManager`:** Pass `prompt_manager=PromptManager(templates=...)` or `PromptManager(resources_dir=Path("..."))` to `get_container()`. With `resources_dir`, use one JSON file per prompt (e.g. `analyze_question_driven.json`) containing `system_prompt` and `user_prompt` strings.
@@ -204,7 +204,7 @@ The default container uses a file-based cache for tool results and agent prompts
 - **Disable:** `get_container(..., cache_enabled=False)`.
 - **Custom cache:** `get_container(..., cache_manager=my_cache_manager)`. Your instance must match the `CacheManager` interface (see `copinance_os.data.cache`). The cache is used for tool outputs and for rendered agent prompts.
 
-You can also set `COPINANCEOS_CACHE_ENABLED=false` (see [Configuration](/getting-started/configuration#cache)).
+You can also set `COPINANCEOS_CACHE_ENABLED=false` (see [Configuration](../getting-started/configuration#storage-and-cache)).
 
 ## Best Practices
 

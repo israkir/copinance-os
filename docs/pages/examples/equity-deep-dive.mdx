@@ -1,0 +1,147 @@
+# Equity Deep Dive
+
+A complete equity research session: start with deterministic analysis, follow up with questions, and pull SEC filings. This shows how deterministic and question-driven modes complement each other.
+
+## 1. Search and confirm the instrument
+
+```bash
+copinance market search "Apple"
+```
+
+Output shows AAPL on NASDAQ. Use the exact symbol in subsequent commands.
+
+## 2. Get a current quote
+
+```bash
+copinance market quote AAPL
+```
+
+Returns price, volume, market cap, P/E, 52-week range, and analyst target if available.
+
+## 3. Run deterministic equity analysis
+
+```bash
+copinance analyze equity AAPL --timeframe mid_term
+```
+
+This runs the full deterministic pipeline: quote → historical prices → fundamentals → key metrics → structured report. Output is saved to `.copinance/results/v2/` and displayed as Rich tables in the terminal.
+
+Use `--json` for machine-readable output:
+
+```bash
+copinance analyze --json equity AAPL --timeframe mid_term | jq '.report.summary'
+```
+
+## 4. Set a profile for tailored output
+
+If you haven't created a profile, the CLI will prompt you. Or create one explicitly:
+
+```bash
+copinance profile create --literacy intermediate --name "Research"
+copinance profile list   # note the profile ID
+```
+
+Pass it to analysis commands:
+
+```bash
+copinance analyze equity AAPL --timeframe mid_term --profile-id <id>
+```
+
+The same numbers — different narrative depth and framing per literacy level.
+
+## 5. Ask a follow-up question
+
+Switch to question-driven mode with `--question`. The LLM uses registered tools (quote, history, fundamentals, regime, macro) to answer:
+
+```bash
+copinance analyze equity AAPL --question "What are the main financial risks right now?"
+
+copinance analyze equity AAPL --question "How does the current P/E compare to its 5-year average and sector peers?"
+
+# Stream tokens as they arrive
+copinance analyze --stream equity AAPL --question "Summarize the revenue trend and margin trajectory."
+```
+
+## 6. Pull historical prices for context
+
+```bash
+copinance market history AAPL --start 2025-01-01 --end 2026-01-01 --interval 1d
+copinance market history AAPL --start 2025-01-01 --end 2026-01-01 --interval 1wk --limit 0
+```
+
+Use `--no-cache` to force a fresh fetch.
+
+## 7. Get fundamentals detail
+
+```bash
+copinance market fundamentals AAPL --periods 5
+copinance market --json fundamentals AAPL --periods 5 > aapl_fundamentals.json
+```
+
+## 8. SEC filings (requires EDGAR identity)
+
+```bash
+# Discover filings
+copinance analyze equity AAPL --question "What 10-K and 10-Q filings are available and what are the accession numbers?"
+
+# Read a specific filing section
+copinance analyze equity AAPL --question "What does Apple say about competition risk in its latest 10-K?"
+
+# Compare with another company
+copinance analyze equity MSFT --question "Compare Apple's and Microsoft's revenue and net income over the last 4 quarters."
+```
+
+## 9. Machine-readable output for automation
+
+```bash
+# Full RunJobResult as JSON
+copinance analyze --json equity AAPL --timeframe mid_term > aapl_result.json
+
+# Extract the structured report
+copinance analyze --json equity AAPL --timeframe mid_term | jq '{
+  summary: .report.summary,
+  metrics: .report.key_metrics,
+  limitations: .report.limitations
+}'
+```
+
+## Library equivalent
+
+```python
+import asyncio
+from copinance_os.ai.llm.config import LLMConfig
+from copinance_os.infra.di import get_container
+from copinance_os.domain.models.job import Job, JobScope, JobTimeframe
+from copinance_os.domain.models.market import MarketType
+
+async def equity_analysis():
+    container = get_container(
+        llm_config=LLMConfig(provider="gemini", api_key="your-key", model="gemini-1.5-pro"),
+        fred_api_key="your-fred-key",
+    )
+    orchestrator = container.research_orchestrator()
+
+    job = Job(
+        scope=JobScope.INSTRUMENT,
+        market_type=MarketType.EQUITY,
+        instrument_symbol="AAPL",
+        timeframe=JobTimeframe.MID_TERM,
+        execution_type="deterministic_instrument_analysis",
+    )
+    result = await orchestrator.run_job(job, {})
+
+    if result.success and result.report:
+        print(result.report.summary)
+        print(result.report.key_metrics)
+
+asyncio.run(equity_analysis())
+```
+
+For question-driven analysis via library, use `AnalyzeInstrumentRequest` with `question` and optionally `conversation_history` for multi-turn sessions — see [Library Guide](../getting-started/library#multi-turn-question-driven-analysis).
+
+## See also
+
+- [Analysis Modes](../user-guide/analysis-modes)
+- [CLI Reference](../user-guide/cli)
+- [SEC Filings](../analysis-reference/sec-filings)
+- [Using as a Library](../getting-started/library)

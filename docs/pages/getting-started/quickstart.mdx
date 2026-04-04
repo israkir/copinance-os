@@ -2,7 +2,7 @@
 
 Run a few **CLI** commands to see deterministic analysis (fixed pipelines) and optional **question-driven** analysis (LLM + tools). The CLI uses the same container and orchestration stack as the library; nothing here is “LLM-only”—quotes and metrics come from data providers and tools.
 
-You can also run a **standalone research question** at the root (no `analyze` subcommand): `copinance "Your question here"` uses the full tool suite with default macro-style market context—see [CLI — Natural language at the root](/user-guide/cli#natural-language-at-the-root).
+You can also run a **standalone research question** at the root (no `analyze` subcommand): `copinance "Your question here"` uses the full tool suite with default macro-style market context—see [CLI — Natural language at the root](../user-guide/cli#natural-language-at-the-root).
 
 ## Your First Analysis
 
@@ -58,7 +58,7 @@ copinance analyze equity AAPL --question "What recent 10-K and 10-Q filings exis
 copinance analyze equity MSFT --question "How does Microsoft’s headline revenue compare to Apple’s over recent periods?"
 ```
 
-The model analyzes the selected context using registered tools (market data, fundamentals, regime/macro, and SEC tools when available). Use `--question` and pick `analyze equity`, `analyze options`, or `analyze macro`. See [CLI — Question-driven examples](/user-guide/cli#question-driven-examples) for more ideas.
+The model analyzes the selected context using registered tools (market data, fundamentals, regime/macro, and SEC tools when available). Use `--question` and pick `analyze equity`, `analyze options`, or `analyze macro`. See [CLI — Question-driven examples](../user-guide/cli#question-driven-examples) for more ideas.
 
 ## Working with Profiles
 

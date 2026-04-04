@@ -38,8 +38,8 @@ Think in **areas of responsibility** rather than file names: **contracts and bus
 | Integrate in an application | [Using as a Library](getting-started/library) |
 | Keys, cache, storage, EDGAR identity, options/Greeks settings | [Configuration](getting-started/configuration) |
 | Deterministic vs question-driven behavior | [Analysis modes](user-guide/analysis-modes) |
-| BSM Greeks and chain metadata | [Analytics](analytics) |
-| Extend providers, tools, or executors | [Architecture](developer-guide/architecture), [Extending](developer-guide/extending), [Data provider interfaces](api-reference/data-providers) |
+| BSM Greeks and chain metadata | [Options & Greeks](analysis-reference/options-and-greeks) |
+| Extend providers, tools, or executors | [Architecture](developer-guide/architecture), [Extending](developer-guide/extending), [Data provider interfaces](developer-guide/api-reference#data-providers) |
 
 ## Core concepts
 
@@ -103,7 +103,7 @@ You can run a **full analysis job** (the whole story for a symbol or the market)
 
 ### Tools: the model uses your calculators
 
-In question-driven mode, **tools** are the bridge: they expose **the same data and logic** the deterministic paths use. That way the model cannot “invent” a number that the system would not also compute when asked directly. Tool sets are composed from **`PluginSpec` bundles**, optional setuptools entry points, and an optional package scan—see [Tools overview](tools) and [Architecture](developer-guide/architecture).
+In question-driven mode, **tools** are the bridge: they expose **the same data and logic** the deterministic paths use. That way the model cannot “invent” a number that the system would not also compute when asked directly. Tool sets are composed from **`PluginSpec` bundles**, optional setuptools entry points, and an optional package scan—see [Tools and bundles](developer-guide/api-reference#tools-and-bundles) and [Architecture](developer-guide/architecture).
 
 ### Where data lives and how it is reused
 

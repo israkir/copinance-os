@@ -1,0 +1,111 @@
+# Market Data Tools
+
+Data provider tools wrap provider methods — yfinance for market data, SEC EDGAR for filings — for use in analysis pipelines and question-driven runs. They handle caching, validation, and error formatting automatically so the LLM always sees a consistent structured result.
+
+## Market data
+
+### `get_market_quote`
+
+Current quote for an instrument: price, volume, market cap, P/E, 52-week range, and similar snapshot fields.
+
+### `get_historical_market_data`
+
+Historical OHLCV data for a date range and interval. Returns a sorted list of `MarketDataPoint` objects. Used by regime detection tools and charting.
+
+### `search_market_instruments`
+
+Search by symbol or display name. Returns matching instruments with exchange and type metadata. The same lookup as `copinance market search`.
+
+### `get_options_chain`
+
+Options chain for an underlying: expiration dates, calls, puts, strike, last price, implied volatility, open interest, volume, and BSM Greeks when QuantLib is available. See [Options & Greeks](options-and-greeks) for how Greeks are computed.
+
+## Fundamental data
+
+### `get_equity_fundamentals`
+
+Comprehensive snapshot for an equity: financial ratios, income statement highlights, balance sheet summary, and key metrics from the configured fundamentals provider.
+
+### `get_financial_statements`
+
+Income statement, balance sheet, or cash flow statement grid for a single symbol across annual or quarterly periods.
+
+## SEC / EDGAR tools
+
+SEC tools are registered when a **SEC-capable** fundamentals provider is wired (see [Configuration — SEC EDGAR](../getting-started/configuration#sec-edgar-edgartools)). Without it, these tools are absent from the registry and question-driven runs will not attempt them.
+
+### `get_sec_filings`
+
+Filing metadata for a symbol: form type, dates, accession number, CIK, filing URL. Use this to discover filings before fetching content.
+
+### `get_sec_filing_content`
+
+Full body text or HTML for a specific filing (CIK + accession number). Large bodies are truncated; metadata indicates the cut point.
+
+### `get_sec_company_edgar_profile`
+
+Entity metadata from EDGAR: name, CIK, SIC code, shares outstanding, public float. Useful for confirming the right issuer before other SEC lookups.
+
+### `get_sec_company_facts_statement`
+
+Multi-period company facts for a single symbol (e.g. income, balance sheet, or cash flow across several annual or quarterly periods). Better suited to long history for one company than `get_financial_statements`.
+
+### `get_sec_compare_financials_metrics`
+
+Standardized headline metrics (revenue, net income, etc.) across multiple tickers side-by-side.
+
+### `get_sec_xbrl_statement_table`
+
+Primary financial statement table from the latest filing of a given form (e.g. 10-K) in XBRL-native presentation, with optional dimensional/segment rows.
+
+### `get_sec_insider_form4`
+
+Recent Form 4 insider filings for an issuer: structured ownership summaries and capped transaction rows.
+
+### `get_sec_13f_institutional_holdings`
+
+Latest 13F-HR portfolio for an institutional filer (manager CIK or ticker you specify): position tables and optional quarter-over-quarter comparison. Values are reported in **thousands of dollars** per SEC convention. Note: this returns one filer's portfolio, not all institutions holding a given stock.
+
+## Using tools programmatically
+
+**Full question-driven registry** (market + regime + macro + fundamentals + SEC when configured):
+
+```python
+from copinance_os.core.pipeline.tools.discovery import collect_question_driven_tools
+from copinance_os.domain.models.tool_bundle_context import ToolBundleContext
+from copinance_os.data.providers import YFinanceMarketProvider
+
+ctx = ToolBundleContext(market_data_provider=YFinanceMarketProvider())
+tools = collect_question_driven_tools(ctx)
+```
+
+**Market + fundamentals preset** (no regime or macro tools):
+
+```python
+from copinance_os.core.pipeline.tools import build_data_provider_tool_registry
+from copinance_os.data.providers import YFinanceMarketProvider
+
+registry = build_data_provider_tool_registry(
+    market_data_provider=YFinanceMarketProvider(),
+    fundamental_data_provider=None,  # wire when you have fundamentals
+)
+tool = registry.get("get_market_quote")
+result = await tool.execute(symbol="AAPL") if tool else None
+```
+
+**Market tools only** (no fundamentals):
+
+```python
+from copinance_os.core.pipeline.tools.data_provider.registry import create_market_data_tools
+from copinance_os.data.providers import YFinanceMarketProvider
+
+tools = create_market_data_tools(YFinanceMarketProvider(), cache_manager=cache_manager)
+```
+
+## See also
+
+- [Macro & Market Regime](macro-regime) — Regime and macro indicator tools
+- [Options & Greeks](options-and-greeks) — BSM Greek estimation detail
+- [SEC Filings](sec-filings) — EDGAR integration and configuration
+- [Developer Guide — API Reference](../developer-guide/api-reference) — Provider port interfaces
+- [Extending](../developer-guide/extending) — Adding custom providers and tools

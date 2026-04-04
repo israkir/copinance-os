@@ -1,0 +1,194 @@
+# API Reference
+
+Extension interfaces and module entry points for integrating or extending Copinance OS. All contracts are defined as `typing.Protocol` under `copinance_os.domain.ports`; implementations live in `data`, `ai`, and `infra`.
+
+## Data providers
+
+Implement these interfaces to plug in custom market, fundamental, alternative, or macro data sources. All methods are `async`. Defined in `copinance_os.domain.ports.data_providers`.
+
+### `MarketDataProvider`
+
+Extends `DataProvider` (`is_available`, `get_provider_name`).
+
+```
+get_quote(symbol: str) -> dict[str, Any]
+get_historical_data(symbol, start_date, end_date, interval) -> list[MarketDataPoint]
+get_intraday_data(symbol, interval) -> list[MarketDataPoint]
+search_instruments(query, limit) -> list[dict[str, Any]]
+get_options_chain(underlying_symbol, expiration_date=None) -> OptionsChain
+```
+
+The default container exposes a composed `MarketDataProvider` (`OptionAnalyticsMarketDataProvider`) that fetches chains and then runs BSM Greek estimation. Vendor-only adapters live under `copinance_os.data.providers`.
+
+### `FundamentalDataProvider`
+
+```
+get_financial_statements(symbol, statement_type, period) -> dict[str, Any]
+get_sec_filings(symbol, filing_types, limit) -> list[dict[str, Any]]
+get_earnings_transcripts(symbol, limit) -> list[dict[str, Any]]
+get_esg_metrics(symbol) -> dict[str, Any]
+get_insider_trading(symbol, lookback_days) -> list[dict[str, Any]]
+get_detailed_fundamentals(symbol, periods, period_type) -> StockFundamentals
+```
+
+Built-in implementations:
+
+| Class | Role |
+|-------|------|
+| `YFinanceFundamentalProvider` | Default fundamental provider: market-driven statements and ratios |
+| `EdgarToolsFundamentalProvider` (`data.providers.sec.edgartools`) | SEC EDGAR: filing lists, content, extended financial and SEC tools |
+
+### `MacroeconomicDataProvider`
+
+```
+get_time_series(series_id, start_date, end_date, *, frequency=None) -> list[MacroDataPoint]
+```
+
+### `AlternativeDataProvider`
+
+```
+get_sentiment_data(symbol, ...) -> dict[str, Any]
+get_web_traffic_metrics(domain, ...) -> dict[str, Any]
+get_satellite_imagery_insights(location, ...) -> dict[str, Any]
+get_supply_chain_data(symbol, ...) -> dict[str, Any]
+get_transaction_data(symbol, ...) -> dict[str, Any]
+```
+
+No built-in implementation; wire your own in `infra/di/`.
+
+### Market data point coercion
+
+Helpers in `copinance_os.data.schemas.market_data_conversions` normalize mixed sequences (dicts and `MarketDataPoint` instances) into sorted lists:
+
+- `coerce_sorted_market_data_points(..., strict=False)` — drops invalid entries; logs a warning with skip counts.
+- `coerce_sorted_market_data_points_detailed` — returns `CoerceMarketDataPointsResult` with per-category counts.
+- `strict=True` — raises `ValueError` / `TypeError` on first invalid entry instead of skipping.
+
+---
+
+## Analytics
+
+### `OptionsChainGreeksEstimator`
+
+```
+estimate_bsm_greeks_for_options_chain(chain: OptionsChain, profile=None) -> OptionsChain
+```
+
+Default implementation: `QuantLibBsmGreekEstimator` (`copinance_os.data.analytics.options`). European BSM via QuantLib's `AnalyticEuropeanEngine`. See [Options & Greeks](../analysis-reference/options-and-greeks) for full detail.
+
+---
+
+## LLM providers
+
+Defined in `copinance_os.ai.llm.providers.base` (`LLMProvider`).
+
+```
+generate_text(prompt, ...) -> str
+generate_with_tools(prompt, tools, ...) -> dict[str, Any]
+generate_text_stream(prompt, ...) -> AsyncGenerator[LLMTextStreamEvent, None]
+```
+
+**`LLMTextStreamEvent`** fields: `kind` (`text_delta` / `done` / `error` / `rollback`), `text_delta`, `native_streaming`, optional `usage`.
+
+**`LLMProviderFactory`** (`ai.llm.providers.factory`) builds `gemini`, `openai`, and `ollama` adapters from `LLMConfig`. **`LLMAnalyzerFactory`** (`ai.llm.analyzer_factory`) wraps a provider as the `LLMAnalyzer` port for question-driven wiring.
+
+Streaming detail: [Library — LLM text streaming](../getting-started/library#llm-text-streaming-library--llmprovider).
+
+---
+
+## Orchestration
+
+### `ResearchOrchestrator`
+
+`copinance_os.core.orchestrator.research_orchestrator`
+
+```python
+orchestrator = container.research_orchestrator()
+result: RunJobResult = await orchestrator.run_job(job, context)
+```
+
+`DefaultJobRunner` dispatches `Job` instances to registered `AnalysisExecutor` implementations. Override `JobRunner` for custom routing (queues, retries, multi-tenant).
+
+### `AnalysisExecutorFactory`
+
+`copinance_os.core.execution_engine.factory`
+
+Builds the default `list[AnalysisExecutor]` used by DI. Extend `create_all` or override `container.analysis_executors` for custom executor types. See [Extending — Adding a Custom Executor](extending#adding-a-custom-executor).
+
+### Analysis requests and types
+
+```python
+from copinance_os.domain.models.analysis import (
+    AnalyzeInstrumentRequest,
+    AnalyzeMarketRequest,
+    execution_type_from_scope_and_mode,
+    resolve_analyze_mode,
+)
+```
+
+`execution_type_from_scope_and_mode(scope, mode)` derives the string discriminator that selects which executor runs.
+
+---
+
+## Tools and bundles
+
+Tool discovery in `copinance_os.core.pipeline.tools.discovery`:
+
+| Function | Purpose |
+|----------|---------|
+| `collect_question_driven_tools(ctx)` | Full tool list used by the question-driven executor |
+| `build_data_provider_tool_registry(...)` | Market + fundamentals preset registry |
+| `load_tools_from_plugin_specs(specs, ctx)` | Low-level: build tools from `PluginSpec` list |
+
+Bundle protocol: `ToolBundleFactory` (`domain.ports.tool_bundles`). Context: `ToolBundleContext` (`domain.models.tool_bundle_context`).
+
+Tools can also be discovered via setuptools entry point group `copinance_os.tool_bundles` or by package scan of modules in `core.pipeline.tools.bundles` that export `tool_bundle_factory`.
+
+---
+
+## Container entry points
+
+```python
+from copinance_os.infra.di import get_container
+
+container = get_container(
+    llm_config=LLMConfig(...),      # required for question-driven analysis
+    fred_api_key="...",             # optional; enables FRED macro data
+    storage_type="memory",          # "file" | "memory"; avoids disk in library use
+    storage_path=None,              # root path for file storage
+    cache_enabled=None,             # True / False / None (use settings)
+    cache_manager=None,             # custom CacheManager instance
+    prompt_templates=None,          # dict overlay for prompt names
+    prompt_manager=None,            # full custom PromptManager
+    load_from_env=True,             # try env vars for LLM if llm_config is None
+)
+
+# Entry points
+container.research_orchestrator()       # ResearchOrchestrator
+container.market_data_provider()        # MarketDataProvider (composed, with Greeks)
+container.fundamental_data_provider()   # FundamentalDataProvider (yfinance)
+container.sec_filings_provider()        # FundamentalDataProvider (EDGAR)
+container.macro_data_provider()         # MacroeconomicDataProvider (FRED/yfinance)
+```
+
+Full options and examples: [Library Guide — Configuration](../getting-started/library#configuration).
+
+---
+
+## Ports reference
+
+All extension contracts live in `src/copinance_os/domain/ports/`:
+
+| File | Interfaces |
+|------|-----------|
+| `data_providers.py` | `MarketDataProvider`, `FundamentalDataProvider`, `MacroeconomicDataProvider`, `AlternativeDataProvider` |
+| `analytics.py` | `OptionsChainGreeksEstimator` |
+| `analyzers.py` | `LLMAnalyzer` |
+| `analysis_execution.py` | `JobRunner`, `AnalysisExecutor` |
+| `repositories.py` | `StockRepository`, `AnalysisProfileRepository` |
+| `storage.py` | `Storage`, `CacheBackend` |
+| `tools.py` | `Tool`, `ToolSchema`, `ToolParameter` |
+| `tool_bundles.py` | `ToolBundleFactory` |
+| `strategies.py` | Screening, due diligence, valuation, risk, thematic, monitoring protocols |
+
+Step-by-step implementation: [Extending](extending).

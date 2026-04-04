@@ -1,0 +1,97 @@
+# SEC Filings (EDGAR)
+
+Copinance OS integrates with SEC EDGAR via [edgartools](https://edgartools.readthedocs.io/) (`copinance_os.data.providers.sec.edgartools`). When configured, SEC tools are available in question-driven analysis for filing discovery, content retrieval, financial statement extraction, insider activity, and institutional holdings.
+
+---
+
+## Setup
+
+The SEC requires a User-Agent identity string for programmatic access.
+
+```bash
+# In .env (either form works):
+EDGAR_IDENTITY="Your Name you@example.com"
+# or:
+COPINANCEOS_EDGAR_IDENTITY="Your Name you@example.com"
+```
+
+A default identity is used for local development if neither is set — override in production with your own contact string.
+
+Full configuration details: [Configuration — SEC EDGAR](../getting-started/configuration#sec-edgar-edgartools).
+
+---
+
+## Available tools
+
+SEC tools are registered when the container wires `EdgarToolsFundamentalProvider` as the SEC filings provider. Without it, SEC-oriented questions will not have access to these tools.
+
+### Filing discovery
+
+**`get_sec_filings`** — List filing metadata for a symbol: form type, dates, accession number, CIK, filing URL. Start here when you need to discover what filings exist.
+
+**`get_sec_company_edgar_profile`** — Entity metadata: name, CIK, SIC code, shares outstanding, public float. Useful to confirm the right issuer before other SEC lookups.
+
+### Filing content
+
+**`get_sec_filing_content`** — Full body text or HTML for a specific filing (CIK + accession number). Large bodies are truncated at a safe limit with a `truncated: true` flag in the result.
+
+### Financial data
+
+**`get_sec_company_facts_statement`** — Multi-period company facts (income, balance sheet, cash flow) across annual or quarterly periods for a single symbol. Better for long history on one company than `get_financial_statements`.
+
+**`get_sec_xbrl_statement_table`** — Primary financial statement table from the latest filing of a given form (e.g. 10-K) in XBRL-native presentation. Optional dimensional/segment rows for detailed view.
+
+**`get_sec_compare_financials_metrics`** — Standardized headline metrics (revenue, net income, gross profit, etc.) across multiple tickers side-by-side. Good for cross-company questions.
+
+### Corporate activity
+
+**`get_sec_insider_form4`** — Recent Form 4 insider filings: structured ownership summaries and transaction rows (capped count).
+
+**`get_sec_13f_institutional_holdings`** — Latest 13F-HR portfolio for an institutional filer (manager CIK or ticker). Position tables with optional quarter-over-quarter comparison. Values are in **thousands of dollars** per SEC convention. Returns one filer's holdings — not all institutions holding a given stock.
+
+---
+
+## Example prompts
+
+With SEC configured, use question-driven analysis (`--question` or natural-language root):
+
+```bash
+# Filing discovery
+copinance analyze equity AAPL --question "What 10-K and 10-Q filings exist and what are the accession numbers?"
+
+# Financial comparison
+copinance analyze equity MSFT --question "Compare revenue and net income for Microsoft and Apple over recent periods."
+
+# Insider activity
+copinance analyze equity TSLA --question "What recent insider Form 4 transactions has Tesla had?"
+
+# Institutional holders
+copinance analyze equity NVDA --question "What does the latest 13F for Vanguard show?"
+
+# XBRL statement
+copinance analyze equity AMZN --question "Pull the income statement from Amazon's most recent 10-K."
+```
+
+---
+
+## Caching
+
+SEC responses are cached using the same `CacheManager` as other tool outputs, with per-operation TTLs (filing lists vs. filing body content have different lifetimes). Disabling cache or supplying a custom `cache_manager` in `get_container()` applies to EDGAR-backed calls as well.
+
+---
+
+## Code layout
+
+| Module | Role |
+|--------|------|
+| `copinance_os.data.providers.sec.edgartools` | `EdgarToolsFundamentalProvider` — all SEC access |
+| `copinance_os.infra.di` | Wires `sec_filings_provider` singleton |
+| `copinance_os.core.pipeline.tools.data_provider` | Registers SEC tools when provider is present |
+
+---
+
+## See also
+
+- [Configuration — SEC EDGAR](../getting-started/configuration#sec-edgar-edgartools)
+- [Market Data Tools](market-data-tools) — other data provider tools
+- [Examples — Equity Deep Dive](../examples/equity-deep-dive) — SEC filing in a real session

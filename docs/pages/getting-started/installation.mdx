@@ -1,13 +1,13 @@
 # Installation
 
-Install the **Copinance OS** Python package (import name **`copinance_os`**; distribution name **`copinance-os`**). **Today:** install from a clone with **`pip install -e .`** (see below). **PyPI** installs will apply once versioned releases are published—see [CHANGELOG](https://github.com/copinance/copinance-os/blob/main/CHANGELOG.md). You get a CLI (`copinance`) and a library wired through **`get_container()`** and **`ResearchOrchestrator`**—see [Architecture](../developer-guide/architecture) for how pieces fit together.
+Install **Copinance OS** (import name `copinance_os`, distribution name `copinance-os`) from source. You get a CLI (`copinance`) and a library wired through `get_container()` and `ResearchOrchestrator` — see [Architecture](../developer-guide/architecture) for how the pieces fit together.
 
 ## Prerequisites
 
 - Python 3.11 or higher
-- `make` (optional, but recommended)
+- `make` (optional, recommended)
 
-## Quick Installation
+## Install from source
 
 **Recommended (with make):**
 ```bash
@@ -16,12 +16,9 @@ cd copinance-os
 make setup
 ```
 
-This will:
-- Create a virtual environment at `.venv`
-- Install all dependencies (including market data, FRED client, **edgartools** for SEC/EDGAR, QuantLib for optional BSM Greeks)
-- Set up pre-commit hooks
+`make setup` creates a virtual environment at `.venv`, installs all dependencies (yfinance, FRED client, edgartools for SEC/EDGAR, QuantLib for BSM Greeks), and sets up pre-commit hooks.
 
-**Manual installation:**
+**Manual:**
 ```bash
 git clone https://github.com/copinance/copinance-os.git
 cd copinance-os
@@ -30,12 +27,11 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-## Verify Installation
+## Verify
 
 ```bash
-# Print installed Copinance OS version (use after pip install)
 copinance version
-# Or run without installing (from repo root):
+# Or from the repo root without a full install:
 python -m copinance_os.interfaces.cli version
 ```
 
@@ -44,24 +40,26 @@ Expected output:
 Copinance OS v0.1.0
 ```
 
-## Optional Dependencies
+## Optional dependencies
 
-**For local LLM support (Ollama):**
+**Local LLM support (Ollama):**
 ```bash
 pip install -e ".[ollama]"
 ```
 
-## No Installation Needed
-
-You can run the CLI directly without installing:
+**REST API (FastAPI):**
 ```bash
-# Run CLI without installing: print version (from repo root)
-python -m copinance_os.interfaces.cli version
+pip install -e ".[api]"
+```
+
+**Plugin system (PyYAML):**
+```bash
+pip install -e ".[plugins]"
 ```
 
 ## Next Steps
 
-- [Quick Start](quickstart) — Run your first analysis (CLI)
-- [Configuration](configuration) — API keys and options
+- [Quick Start](quickstart) — Run your first analysis
+- [Configuration](configuration) — LLM keys, FRED, EDGAR, cache
 - [Using as a Library](library) — Integrate into your app
-- [CLI Reference](/user-guide/cli) — Full command reference
+- [CLI Reference](../user-guide/cli) — Full command reference

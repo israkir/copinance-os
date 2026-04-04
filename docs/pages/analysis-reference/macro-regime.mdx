@@ -1,0 +1,202 @@
+# Macro & Market Regime
+
+Two complementary analysis layers describe market conditions:
+
+- **Market regime tools** classify price and volatility behavior from historical series (trend, cycles, VIX, breadth, sector rotation). Rule-based; fast and interpretable.
+- **Macro indicators** aggregate observable economic series — rates, credit, labor, housing, manufacturing, consumer, global — into structured signals. 47+ series via FRED (with yfinance fallbacks).
+
+Both are used together in `copinance analyze macro` and are available to the LLM in question-driven runs. Regime labels and macro signals are **heuristic** contextual inputs — treat them as backdrop, not as forecasts.
+
+---
+
+## Market regime tools
+
+Regime tools live in `copinance_os.core.pipeline.tools.analysis.market_regime`. They take historical price data and return structured classifications with confidence levels.
+
+### `detect_market_trend`
+
+Classifies the instrument as **bull**, **bear**, or **neutral** using moving average crossovers and volatility-scaled momentum (log-returns / rolling σ).
+
+**Key outputs:**
+
+| Field | Description |
+|-------|-------------|
+| `regime` | `"bull"` / `"bear"` / `"neutral"` |
+| `confidence` | `"high"` / `"medium"` / `"low"` |
+| `log_return` | ln(P_t / P_0) over the lookback period |
+| `volatility_scaled_momentum` | log_return / σ — the classification signal |
+| `ma_relationship` | `"bullish"` / `"bearish"` / `"neutral"` (50d vs 200d MA) |
+| `recent_volatility` | Annualized realized vol (percentage) |
+| `methodology` | `"log_returns_with_volatility_scaling"` |
+
+**Parameters:** `symbol` (required), `lookback_days` (default 200), `short_ma_period` (default 50), `long_ma_period` (default 200).
+
+```python
+from copinance_os.core.pipeline.tools.analysis import MarketRegimeDetectTrendTool
+from copinance_os.data.providers import YFinanceMarketProvider
+
+tool = MarketRegimeDetectTrendTool(YFinanceMarketProvider())
+result = await tool.execute(symbol="AAPL", lookback_days=200)
+# result.data["regime"], result.data["confidence"]
+```
+
+### `detect_volatility_regime`
+
+Classifies realized volatility as **high**, **normal**, or **low** relative to the historical distribution (μ ± σ thresholds over the lookback window).
+
+**Key outputs:**
+
+| Field | Description |
+|-------|-------------|
+| `regime` | `"high"` / `"normal"` / `"low"` |
+| `current_volatility` | Current annualized vol (percentage) |
+| `volatility_percentile` | Where current vol sits in the historical distribution |
+| `mean_volatility` | Historical mean over the lookback |
+
+**Parameters:** `symbol` (required), `lookback_days` (default 252), `volatility_window` (default 20).
+
+### `detect_market_cycles`
+
+Identifies Wyckoff-style cycle phases — accumulation, markup, distribution, markdown — based on price structure and volume patterns.
+
+Returns `phase`, `confidence`, and structural observations. Surface `potential_regime_change: true` prominently when detected.
+
+### `detect_market_regime_indicators`
+
+Aggregates VIX level, market breadth, and sector rotation into a composite regime signal for the broad market.
+
+**Inputs used:** VIX (^VIX), the 11 S&P sector ETFs (XLK, XLE, XLI, XLV, XLF, XLP, XLY, XLU, XLB, XLC, XLRE), and the reference index (default SPY).
+
+**Key outputs:** `vix_regime`, `breadth_signal`, `sector_rotation_signal`, `composite_regime`.
+
+```bash
+# CLI — uses these tools internally
+copinance analyze macro --market-index SPY --lookback-days 252
+copinance analyze macro --no-include-vix --no-include-sector-rotation
+```
+
+### Using regime tools directly
+
+```python
+from copinance_os.core.pipeline.tools.analysis import create_rule_based_regime_tools
+from copinance_os.data.providers import YFinanceMarketProvider
+
+tools = create_rule_based_regime_tools(YFinanceMarketProvider())
+# tools is list[Tool]: detect_market_trend, detect_volatility_regime, detect_market_cycles, detect_market_regime_indicators
+```
+
+---
+
+## Macro indicator tool
+
+The `macro_regime_indicators` tool aggregates 47+ economic series into nine categories. Numbers are fetched via `MacroeconomicDataProvider` (FRED when configured, yfinance proxies otherwise) — the LLM interprets tool output, it does not compute economic prints.
+
+### Categories and series
+
+**Interest rates & yield curve**
+
+| Series | FRED ID |
+|--------|---------|
+| 10Y Treasury yield | DGS10 |
+| 2Y Treasury yield | DGS2 |
+| 3M T-bill | DGS3MO |
+| 10Y real yield | DFII10 |
+| 10Y breakeven inflation | T10YIE |
+| 10Y–2Y spread | T10Y2Y |
+| 10Y–3M spread | T10Y3M |
+
+Signal: 10Y–2Y < 0 → yield curve inversion, historically associated with recession risk. Report the spread explicitly when slope is negative.
+
+**Credit spreads & risk premiums**
+
+High-yield OAS (BAMLH0A0HYM2), investment-grade OAS (BAMLC0A0CM). Tightening spreads → risk-on; widening → stress.
+
+**Commodities & energy**
+
+WTI crude spot (DCOILWTICO), momentum and trend.
+
+**Labor market**
+
+Unemployment rate (UNRATE), non-farm payrolls (PAYEMS), JOLTS: openings (JTSJOL), hires (JTSHIR), separations (JTSTSR), quits (JTSQUR).
+
+**Housing**
+
+New home sales (HSN1F), existing home sales (EXHOSLUSM495S), Case-Shiller 20-city (CSUSHPISA) and 10-city (SPCS10RSA), FHFA HPI (USSTHPI), housing starts (HOUST), building permits (PERMIT).
+
+**Manufacturing**
+
+Industrial production (INDPRO), capacity utilization (TCU), manufacturing IP (IPMAN), durable goods orders (NEWORDER), factory orders (AMTMTI).
+
+**Consumer**
+
+Retail sales (RRSFS), consumer confidence (UMCSENT), personal consumption (PCEC), income (PI), saving rate (PSAVERT), real PCE (PCEC96).
+
+**Global & FX**
+
+EUR/USD, USD/JPY, GBP/USD via yfinance; EM ETFs (VWO, EEM).
+
+**Advanced / leading**
+
+Fed balance sheet (WALCL), leading economic index (USSLIND), CDS proxies via HYG/LQD ETF spreads.
+
+### CLI usage
+
+```bash
+# All categories, default SPY reference (252-day lookback)
+copinance analyze macro
+
+# Custom index and lookback
+copinance analyze macro --market-index QQQ --lookback-days 90
+
+# Select specific categories
+copinance analyze macro --no-include-labor --no-include-housing --no-include-manufacturing
+
+# Question-driven macro analysis
+copinance analyze macro --question "Is the yield curve signaling a slowdown?"
+copinance --stream "What do credit spreads and labor data say about recession risk?"
+```
+
+### Programmatic usage
+
+```python
+from copinance_os.core.pipeline.tools.analysis.market_regime.macro_indicators import (
+    create_macro_regime_indicators_tool,
+)
+from copinance_os.data.providers import FredMacroeconomicProvider, YFinanceMarketProvider
+
+tool = create_macro_regime_indicators_tool(
+    FredMacroeconomicProvider(api_key="your-key"),
+    YFinanceMarketProvider(),
+)
+result = await tool.execute(
+    lookback_days=90,
+    include_rates=True,
+    include_credit=True,
+    include_labor=True,
+    include_housing=False,
+    include_manufacturing=False,
+    include_consumer=True,
+    include_global=False,
+    include_advanced=False,
+)
+rates = result.data["rates"]
+labor = result.data["labor"]
+```
+
+### FRED vs yfinance fallback
+
+| Category | Primary | Fallback |
+|----------|---------|---------|
+| Rates, credit, labor, housing, manufacturing, consumer | FRED | Partial (ETF proxies where applicable) |
+| FX, EM ETFs | yfinance | — |
+
+Without a FRED key, rate and credit series use Treasury futures and ETF spreads; labor, housing, and manufacturing data may be unavailable. Set `COPINANCEOS_FRED_API_KEY` for full coverage (see [Configuration](../getting-started/configuration#fred-api-macro-data)).
+
+---
+
+## See also
+
+- [Analysis Modes](../user-guide/analysis-modes#macro-regime-analysis) — full macro CLI options
+- [CLI Reference](../user-guide/cli#macro--market-regime) — `copinance analyze macro` flags
+- [Configuration](../getting-started/configuration) — FRED key, cache TTLs
+- [Examples](../examples/macro-dashboard) — macro dashboard walkthrough

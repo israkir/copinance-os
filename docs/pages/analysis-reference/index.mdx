@@ -1,0 +1,51 @@
+# Analysis Reference
+
+This section covers everything the system can compute and analyze: market data retrieval, market regime detection, macroeconomic indicators, options analytics, and SEC filing access. All numeric outputs come from providers and domain code — the LLM interprets and synthesizes, it does not invent numbers.
+
+## What's in this section
+
+| Page | What it covers |
+|------|----------------|
+| [Market Data Tools](market-data-tools) | Quotes, history, search, options chains, fundamentals — the tool layer wrapping providers |
+| [Macro & Market Regime](macro-regime) | Trend, volatility, cycle detection; VIX, breadth, sector rotation; 47+ FRED macro indicators |
+| [Options & Greeks](options-and-greeks) | QuantLib BSM Greek estimation, implied vol normalization, metadata contract |
+| [SEC Filings](sec-filings) | EDGAR filing lists, content, entity profiles, XBRL statements, insiders, 13F holdings |
+
+## How tools are used
+
+Tools are invoked automatically in **question-driven** analysis (the LLM selects which to call) and composed into deterministic pipelines (e.g. `copinance analyze macro`). They always return structured JSON — the LLM sees tool results, not raw dataframes.
+
+In question-driven mode, the tool registry is built from the container's providers. Enable all capabilities at once:
+
+```bash
+copinance analyze equity AAPL --question "What is the current price and how does the macro backdrop look?"
+copinance analyze macro --question "Is the yield curve signaling a slowdown?"
+copinance analyze equity MSFT --question "Compare revenue and net income to Apple over recent quarters."
+```
+
+## Programmatic tool access
+
+Build and use tools directly from your container:
+
+```python
+from copinance_os.core.pipeline.tools.discovery import collect_question_driven_tools
+from copinance_os.domain.models.tool_bundle_context import ToolBundleContext
+from copinance_os.infra.di import get_container
+
+container = get_container(fred_api_key="your-key")
+ctx = ToolBundleContext(
+    market_data_provider=container.market_data_provider(),
+    macro_data_provider=container.macro_data_provider(),
+    fundamental_data_provider=container.fundamental_data_provider(),
+    sec_filings_provider=container.sec_filings_provider(),
+)
+tools = collect_question_driven_tools(ctx)
+# tools is list[Tool] — pass to your LLM adapter or call directly
+```
+
+## See also
+
+- [Analysis Modes](../user-guide/analysis-modes) — deterministic vs question-driven
+- [Configuration](../getting-started/configuration) — LLM, FRED, EDGAR, BSM inputs
+- [Examples](../examples) — end-to-end worked scenarios
+- [Developer Guide — Extending](../developer-guide/extending) — adding custom providers and tools

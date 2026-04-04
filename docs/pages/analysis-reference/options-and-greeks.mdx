@@ -1,0 +1,122 @@
+# Options & Greeks
+
+Option Greeks in Copinance OS are estimated with **European Black–Scholes–Merton** using QuantLib's `AnalyticEuropeanEngine` (`copinance_os.data.analytics.options`). Payoffs are European; American exercise or dividends beyond a continuous yield are not modeled.
+
+---
+
+## Greek reference
+
+| Greek | Valid range | Notes |
+|-------|-------------|-------|
+| **Delta** | [−1, 1] | Deep ITM calls → ~1; deep OTM calls → ~0. Puts: ∈ [−1, 0]. |
+| **Gamma** | ≥ 0 | Peaks near the money; ≈ 0 deep ITM or OTM. |
+| **Vega** | ≥ 0 | Largest near the money; tiny in the wings. |
+| **Theta** | typically < 0 | See [Theta caveat](#theta-caveat) — QuantLib's convention differs from "dollars per calendar day." |
+| **Rho** | — | Call rho typically positive; European put rho often negative. |
+
+Greeks return `None` when: time to expiry ≤ 0, implied volatility ≤ 0, or spot ≤ 0. Surface `None` as unavailable, not zero.
+
+### Theta caveat
+
+QuantLib's `theta()` is **not** the same as "option premium dollars lost per calendar day." Near expiry and at the money, the reported magnitude can look very large relative to the option's last price — that reflects QuantLib's scaling convention, not a literal per-day dollar decay figure. For publication-grade daily theta, convert from QuantLib's convention or bump the price with a small time step. See [QuantLib Greeks reference](https://www.quantlib.org/reference/group__quantlib__greeks.html).
+
+---
+
+## Implied volatility normalization
+
+Raw `impliedVolatility` from yfinance is normalized when building `OptionContract`:
+
+- Values **> 1** are treated as percent points (e.g. `13.67` → σ = `0.1367`).
+- Values **≤ 1** are kept as fractional σ (e.g. `0.25` = 25% annualized vol).
+
+A stored IV of `0.94` in the contract means **~94% annualized σ**. The table in `copinance market options` shows the normalized value; any value printed above 1.0 was already fractional from the provider and was not divided.
+
+---
+
+## Display vs domain model
+
+The `copinance market options` table formats near-zero Greeks as `0` or scientific notation to suppress floating-point noise. `OptionGreeks` on `OptionContract` in code keeps full numeric precision from QuantLib.
+
+### Reading the CLI table
+
+```bash
+copinance market options AAPL
+copinance market options AAPL -e 2026-06-19 -s call
+copinance market options SPY --no-cache       # refresh if cache predates Greek support
+copinance market options MSTR --no-greeks     # hide Greek columns on narrow terminals
+```
+
+**Typical moneyness patterns:**
+
+- **Deep in-the-money calls** (strike well below spot): delta ≈ 1, gamma ≈ 0, vega ≈ 0.
+- **Deep out-of-the-money puts** (strike well below spot, tiny premium): delta ≈ 0, gamma/vega/theta tiny. The table shows `0` for values that round to zero.
+- **Near the money**: gamma and vega are largest; call delta moves from ~0 toward 1 as strike falls; put delta moves from ~0 toward −1 as strike rises through the money.
+
+---
+
+## Expiration selection
+
+The default expiration is the **earliest listed date on or after today**, avoiding expired front months. Pass `-e YYYY-MM-DD` to select a specific expiry. If the requested expiry is strictly before the evaluation date, Greeks are not computed (returns `None`).
+
+---
+
+## Metadata contract
+
+`OptionsChain.metadata` is a `dict[str, str]` shared between data providers (inputs) and the analytics layer (outputs).
+
+### Provider inputs (optional)
+
+| Key | Meaning |
+|-----|---------|
+| `provider` | Short name (e.g. `yfinance`) |
+| `dividend_yield` | Continuous dividend yield used in BSM (decimal, e.g. `0.02`). If absent, `COPINANCEOS_OPTION_GREEKS_DIVIDEND_YIELD_DEFAULT` or `AnalysisProfile.preferences` applies. |
+
+### Greek estimation outputs
+
+Set by `estimate_bsm_greeks_for_options_chain` / `QuantLibBsmGreekEstimator` after a successful run:
+
+| Key | Example | Meaning |
+|-----|---------|---------|
+| `option_greeks_model` | `quantlib_analytic_european_bsm` | Model identifier |
+| `option_greeks_risk_free_rate` | `0.045` | Rate used for the run (string decimal) |
+| `option_greeks_dividend_yield_assumption` | `0` | Continuous yield passed to QuantLib |
+| `option_greeks_as_of_date` | `2026-03-28` | Evaluation date (ISO) |
+
+---
+
+## Configuration
+
+```bash
+# Annual risk-free rate (decimal). Unset uses built-in default (0.045).
+COPINANCEOS_OPTION_GREEKS_RISK_FREE_RATE=0.045
+
+# Default dividend yield when chain metadata has no dividend_yield. Unset = 0.
+COPINANCEOS_OPTION_GREEKS_DIVIDEND_YIELD_DEFAULT=0
+```
+
+Profile-level overrides (when you construct `QuantLibBsmGreekEstimator(profile=...)`):
+- `option_greeks_risk_free_rate`
+- `option_greeks_dividend_yield_default`
+
+The default DI container uses `QuantLibBsmGreekEstimator()` with `profile=None`, so only environment settings apply unless you wire a custom estimator.
+
+---
+
+## Code layout
+
+| Module | Role |
+|--------|------|
+| `copinance_os.data.providers.*` | Vendor adapters (yfinance fetches raw chain) |
+| `copinance_os.data.analytics.options` | QuantLib BSM Greek estimation |
+| `copinance_os.data.providers.market` | Composed `MarketDataProvider` (fetch + estimate in one call) |
+
+See [Architecture](../developer-guide/architecture) for layer rules.
+
+---
+
+## See also
+
+- [CLI Reference — Options Chain Snapshot](../user-guide/cli#options-chain-snapshot)
+- [Configuration](../getting-started/configuration#option-greek-estimation-bsm)
+- [Examples — Options Session](../examples/options-session)
+- [Analysis Modes — Options Analysis](../user-guide/analysis-modes#options-analysis)
