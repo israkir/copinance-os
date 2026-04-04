@@ -27,7 +27,7 @@ copinance <command>
 python -m copinance_os.interfaces.cli <command>
 ```
 
-**Performance:** `copinance --help`, `copinance help`, and `copinance version` load quickly because heavy subcommands (analyze, cache, market, profile) are loaded only when you run them. See [Architecture — Container and performance](/developer-guide/architecture#container-and-performance) for the design.
+**Performance:** `copinance --help`, `copinance help`, and `copinance version` load quickly because heavy subcommands (analyze, cache, market, profile) are loaded only when you run them. See [Architecture — Container and performance](../developer-guide/architecture#container-and-performance) for the design.
 
 ## Natural language at the root
 
@@ -46,7 +46,7 @@ copinance --json --include-prompt "Summarize labor and inflation"
 - **`--stream`**: print LLM tokens to stdout during the run (question-driven only). Ignored with **`--json`**.
 - **`--include-prompt`**: include rendered prompts in saved results (when not using `--json`, behavior matches analyze question-driven runs).
 
-Like **`analyze`**, root **`copinance "…"`** is **single-turn**: one natural-language question per invocation. **Multi-turn** conversation (prior Q&A in the same thread) is **library-only**—use **`AnalyzeMarketRequest`** with **`conversation_history`** in Python (same underlying path as this CLI entry); see [Library — Multi-turn question-driven analysis](/getting-started/library#multi-turn-question-driven-analysis).
+Like **`analyze`**, root **`copinance "…"`** is **single-turn**: one natural-language question per invocation. **Multi-turn** conversation (prior Q&A in the same thread) is **library-only**—use **`AnalyzeMarketRequest`** with **`conversation_history`** in Python (same underlying path as this CLI entry); see [Library — Multi-turn question-driven analysis](../getting-started/library#multi-turn-question-driven-analysis).
 
 For symbol-scoped or instrument flows, use **`copinance analyze equity|options|macro`** instead.
 
@@ -77,7 +77,7 @@ Rich human output and saving results under `.copinance/results/v2/` still apply 
 
 ## Streaming question-driven output (`--stream`)
 
-Use **`--stream` on the `analyze` group** (before `equity`, `options`, or `macro`) or **at the root** before a natural-language question to print **LLM tokens to stdout** as they are generated during question-driven tool loops. **`--json` turns streaming off.** After the run, Rich still prints the same **Analysis** panel (markdown) so you always have a readable block for copy-paste, plus run metadata and the saved file path. Library-oriented streaming options (`LLMConfig`, providers) are described in [Using as a Library — LLM text streaming](/getting-started/library#llm-text-streaming-library--llmprovider).
+Use **`--stream` on the `analyze` group** (before `equity`, `options`, or `macro`) or **at the root** before a natural-language question to print **LLM tokens to stdout** as they are generated during question-driven tool loops. **`--json` turns streaming off.** After the run, Rich still prints the same **Analysis** panel (markdown) so you always have a readable block for copy-paste, plus run metadata and the saved file path. Library-oriented streaming options (`LLMConfig`, providers) are described in [Using as a Library — LLM text streaming](../getting-started/library#llm-text-streaming-library--llmprovider).
 
 ```bash
 copinance analyze --stream equity AAPL --question "What is the beta?"
@@ -94,7 +94,7 @@ copinance version
 
 ## Market Commands
 
-The `market` group accepts **`--json`** (see [Machine-readable output](#machine-readable-output-json)).
+The `market` group accepts **`--json`** (see [Machine-readable output](#machine-readable-output---json)).
 
 ### Search Instruments
 
@@ -171,11 +171,11 @@ copinance market options MSTR --side all --limit 20 --no-greeks
 - `--no-cache`: Bypass cache and fetch fresh data
 - `--no-greeks`: Hide Delta/Gamma/Theta/Vega/Rho columns
 
-**Tuning BSM inputs:** set `COPINANCEOS_OPTION_GREEKS_RISK_FREE_RATE` and optional `COPINANCEOS_OPTION_GREEKS_DIVIDEND_YIELD_DEFAULT` (see [Configuration](/getting-started/configuration)). Metadata keys are documented in [Options chain metadata](/analytics/options-chain-metadata).
+**Tuning BSM inputs:** set `COPINANCEOS_OPTION_GREEKS_RISK_FREE_RATE` and optional `COPINANCEOS_OPTION_GREEKS_DIVIDEND_YIELD_DEFAULT` (see [Configuration](../getting-started/configuration)). Metadata keys are documented in [Options & Greeks](../analysis-reference/options-and-greeks).
 
 #### Reading the Greek columns
 
-Greeks come from **European Black–Scholes–Merton** via **QuantLib** (`AnalyticEuropeanEngine`), using the chain’s underlying price and each row’s implied volatility (after [normalization](/analytics/options-chain-metadata#provider-inputs-optional) for Yahoo-style data).
+Greeks come from **European Black–Scholes–Merton** via **QuantLib** (`AnalyticEuropeanEngine`), using the chain’s underlying price and each row’s implied volatility (after [normalization](../analysis-reference/options-and-greeks#implied-volatility-normalization) for Yahoo-style data).
 
 **Moneyness (typical patterns):**
 
@@ -187,7 +187,7 @@ Greeks come from **European Black–Scholes–Merton** via **QuantLib** (`Analyt
 
 **Theta (important):** QuantLib’s `theta()` is **not** the same as a casual “dollars decay per calendar day” figure you might see on a retail chain. It follows **QuantLib’s definition** for the analytic engine (time decay in the library’s units). Near **expiry** and **at the money**, **magnitude can look very large** next to the option **last** price—that usually reflects **how theta is scaled in the engine**, not that the option literally loses that many dollars per day. For publication-grade “daily theta” you would convert from QuantLib’s convention (see [QuantLib Greeks](https://www.quantlib.org/reference/group__quantlib__greeks.html) and library docs) or bump the price with a small time step.
 
-**Implied volatility in the table:** After normalization, a printed IV of **0.94** means about **94% annualized σ** (fractional form). Values **above 1** from Yahoo were converted from **percent points** (see [Options chain metadata](/analytics/options-chain-metadata)).
+**Implied volatility in the table:** After normalization, a printed IV of **0.94** means about **94% annualized σ** (fractional form). Values **above 1** from Yahoo were converted from **percent points** (see [Options & Greeks](../analysis-reference/options-and-greeks)).
 
 ### Fundamentals
 
@@ -261,7 +261,7 @@ copinance profile delete <profile-id> --force
 
 ## Analyze Commands
 
-The `analyze` group accepts **`--json`** (see [Machine-readable output](#machine-readable-output-json)) and **`--stream`** (see [Streaming question-driven output](#streaming-question-driven-output---stream)); place them **before** the subcommand (`equity`, `options`, `macro`).
+The `analyze` group accepts **`--json`** (see [Machine-readable output](#machine-readable-output---json)) and **`--stream`** (see [Streaming question-driven output](#streaming-question-driven-output---stream)); place them **before** the subcommand (`equity`, `options`, `macro`).
 
 Run one-off analysis. Results are saved under `.copinance/results/v2/`; profiles, cache, and state live under versioned subdirectories inside `.copinance`.
 
@@ -270,7 +270,7 @@ Analyze is progressive:
 - With `--question`, it runs question-driven analysis and lets the model call the relevant tools.
 - Use `--mode auto|deterministic|question_driven` when you want to force the execution style.
 
-**Multi-turn (library only):** The CLI always sends **one** natural-language question per invocation on **`analyze`** and on **root** **`copinance "…"`** (or **none** for deterministic **`analyze`** without `--question`). To continue a thread with prior user/assistant turns, use **`AnalyzeInstrumentRequest` / `AnalyzeMarketRequest`** with **`conversation_history`** in Python — see [Library — Multi-turn question-driven analysis](/getting-started/library#multi-turn-question-driven-analysis). The CLI does not accept prior-turn transcripts.
+**Multi-turn (library only):** The CLI always sends **one** natural-language question per invocation on **`analyze`** and on **root** **`copinance "…"`** (or **none** for deterministic **`analyze`** without `--question`). To continue a thread with prior user/assistant turns, use **`AnalyzeInstrumentRequest` / `AnalyzeMarketRequest`** with **`conversation_history`** in Python — see [Library — Multi-turn question-driven analysis](../getting-started/library#multi-turn-question-driven-analysis). The CLI does not accept prior-turn transcripts.
 
 ### Analyze an Equity
 
@@ -303,7 +303,7 @@ Illustrative questions you can ask (wording may vary):
 - **Institutions (13F):** *“What were the largest equity positions in [known filer]’s latest quarterly 13F?”* (works for a **filer** you name—e.g. a fund or manager—not as a global screen of every holder of a stock.)
 - **Entity check:** *“Confirm CIK and industry classification for AAPL before we dig into filings.”*
 
-Use **`--mode question_driven`** to force tool-using mode even if you omit `--question` in edge cases, and **`--include-prompt`** to save rendered prompts with results. SEC-heavy questions need **EDGAR identity** configured (see [Configuration — SEC EDGAR](/getting-started/configuration)).
+Use **`--mode question_driven`** to force tool-using mode even if you omit `--question` in edge cases, and **`--include-prompt`** to save rendered prompts with results. SEC-heavy questions need **EDGAR identity** configured (see [Configuration — SEC EDGAR](../getting-started/configuration)).
 
 **Options:**
 - **`--json`** / **`--stream`** (group, before `equity`): machine JSON vs. streaming tokens for question-driven runs (see sections above).

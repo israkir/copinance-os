@@ -1,0 +1,150 @@
+# Options Session
+
+An options research session: inspect the chain with BSM Greeks, ask positioning questions, and run deterministic options analysis. QuantLib must be installed (it is included in the default `make setup`).
+
+## 1. View the options chain
+
+```bash
+# Default expiry (earliest date on or after today), all strikes, Greeks on
+copinance market options AAPL
+
+# Specific expiry, calls only
+copinance market options AAPL -e 2026-06-19 -s call
+
+# All sides, limit visible rows
+copinance market options AAPL --side all --limit 30
+
+# Hide Greek columns (narrow terminals)
+copinance market options AAPL --no-greeks
+
+# Bypass cache to get fresh data and recompute Greeks
+copinance market options AAPL --no-cache
+```
+
+The table shows Strike, Last, Bid, Ask, IV, Open Interest, Volume, Delta, Gamma, Theta, Vega, Rho by default. See [Options & Greeks](../analysis-reference/options-and-greeks) for how to read each column.
+
+## 2. Machine-readable chain
+
+```bash
+# Full chain as JSON
+copinance market --json options AAPL > aapl_options.json
+
+# Specific expiry
+copinance market --json options AAPL -e 2026-06-19 > aapl_jun_options.json
+
+# Extract call-side deltas
+copinance market --json options AAPL | jq '.contracts[] | select(.option_type == "call") | {strike: .strike, delta: .greeks.delta}'
+```
+
+## 3. Run deterministic options analysis
+
+```bash
+# Runs the full deterministic pipeline: underlying quote + chain + OI summary + ATM contract
+copinance analyze options AAPL
+
+# With a specific expiry
+copinance analyze options AAPL --expiration 2026-06-19
+```
+
+Deterministic analysis saves a structured report to `.copinance/results/v2/` and prints a Rich panel. No LLM required.
+
+## 4. Ask positioning questions
+
+Add `--question` to switch to question-driven mode. The LLM calls options chain tools and interprets the results:
+
+```bash
+# Overall positioning
+copinance analyze options AAPL --question "How is the options market positioned — is there elevated put or call activity?"
+
+# Specific expiry, specific side
+copinance analyze options AAPL \
+  --question "What are the most active call strikes near the money?" \
+  --expiration 2026-06-19 --side call
+
+# Put/call open interest ratio
+copinance analyze options AAPL --question "What's the put/call open interest ratio and what does it signal?"
+
+# Stream the answer
+copinance analyze --stream options AAPL --question "Summarize the implied volatility skew for AAPL options."
+
+# SPY macro options context
+copinance analyze options SPY --question "What does the put/call positioning on SPY suggest about market hedging activity?"
+```
+
+## 5. Understand Greeks on a specific contract
+
+```bash
+# Get the chain as JSON and inspect a specific strike's Greeks
+copinance market --json options AAPL -e 2026-06-19 -s call | \
+  jq '.contracts[] | select(.strike == 200) | {strike, last: .last_price, delta: .greeks.delta, gamma: .greeks.gamma, theta: .greeks.theta, vega: .greeks.vega}'
+```
+
+Or ask the model:
+
+```bash
+copinance analyze options AAPL \
+  --question "For the 200-strike call expiring June 2026, what do the Greeks tell us about the risk profile?" \
+  --expiration 2026-06-19 --side call
+```
+
+## 6. Tune BSM assumptions
+
+If the default risk-free rate or dividend yield doesn't match your view:
+
+```bash
+# In .env
+COPINANCEOS_OPTION_GREEKS_RISK_FREE_RATE=0.05
+COPINANCEOS_OPTION_GREEKS_DIVIDEND_YIELD_DEFAULT=0.006   # e.g. AAPL ~0.6%
+```
+
+Then re-fetch with `--no-cache` to trigger recomputation with the new inputs.
+
+## Library equivalent
+
+```python
+import asyncio
+from copinance_os.infra.di import get_container
+from copinance_os.domain.models.job import Job, JobScope, JobTimeframe
+from copinance_os.domain.models.market import MarketType
+
+async def options_analysis():
+    container = get_container()  # no LLM needed for deterministic
+    orchestrator = container.research_orchestrator()
+    provider = container.market_data_provider()
+
+    # Deterministic options analysis
+    job = Job(
+        scope=JobScope.INSTRUMENT,
+        market_type=MarketType.OPTIONS,
+        instrument_symbol="AAPL",
+        timeframe=JobTimeframe.SHORT_TERM,
+        execution_type="deterministic_instrument_analysis",
+    )
+    result = await orchestrator.run_job(job, {})
+    if result.success and result.report:
+        print(result.report.key_metrics)
+
+    # Direct chain access with Greeks
+    chain = await provider.get_options_chain("AAPL", "2026-06-19")
+    for contract in chain.calls[:5]:
+        g = contract.greeks
+        if g:
+            print(f"Strike {contract.strike}: delta={g.delta:.3f}, gamma={g.gamma:.4f}")
+
+asyncio.run(options_analysis())
+```
+
+## Interpreting what you see
+
+**High put OI relative to calls** → elevated hedging. Under the contrarian framing: extreme put/call ratios historically mark potential bottoms (crowded hedging → short squeeze risk), not bearish confirmation. Surface the contrarian implication, not the literal direction.
+
+**IV skew** (OTM puts priced richer than OTM calls) → typical for equity index options; reflects demand for downside protection. Steep skew → elevated tail-risk concern.
+
+**Theta near expiry** → QuantLib's theta is not literal daily dollar decay; see [Options & Greeks — Theta caveat](../analysis-reference/options-and-greeks#theta-caveat).
+
+## See also
+
+- [Options & Greeks](../analysis-reference/options-and-greeks) — Greek reference and IV normalization
+- [Analysis Modes — Options Analysis](../user-guide/analysis-modes#options-analysis)
+- [CLI Reference — Options Chain Snapshot](../user-guide/cli#options-chain-snapshot)
+- [Configuration — BSM inputs](../getting-started/configuration#option-greek-estimation-bsm)

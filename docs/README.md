@@ -2,9 +2,19 @@
 
 This site is built with [Nextra](https://nextra.site/) on Next.js. **Page content** lives in `docs/pages/` as MDX; navigation titles and order are set in `_meta.tsx` files per folder.
 
-## Philosophy (what the docs describe)
+## What the docs cover
 
-The docs track the **`copinance_os`** package: **domain** contracts, **data** providers (including optional **SEC/EDGAR** under `data.providers.sec`) and analytics, **core** orchestration (`ResearchOrchestrator`, `DefaultJobRunner`, `AnalysisExecutorFactory`, execution engine, pipeline tools, **tool bundle discovery** under `core.pipeline.tools.discovery`), **`ai/llm`** for explanation and tool use, **infra** for DI and plugin loading, **interfaces/cli** (`main` → **`dispatch`** vs lazy Typer subcommands; root **`copinance "…"`** for generic question-driven runs; **`--json`** on **`analyze`**, **`market`**, and generic root; question-driven **multi-turn** sessions are **library-only** via `conversation_history` on analyze requests), and optional **interfaces/api** (FastAPI). The canonical **package tree** with reserved / in-progress labels is in [Architecture — Package tree](https://copinance.github.io/copinance-os/developer-guide/architecture#package-tree-source). Deterministic finance stays in data and domain; LLMs explain and route, they do not replace pricing engines.
+The docs track the `copinance_os` package:
+
+- **Domain** contracts (models, ports, strategy protocols)
+- **Data providers** — yfinance, FRED, SEC/EDGAR (`data.providers.sec`), QuantLib Greeks
+- **Core orchestration** — `ResearchOrchestrator`, `DefaultJobRunner`, `AnalysisExecutorFactory`, execution engine, pipeline tools, tool bundle discovery (`core.pipeline.tools.discovery`)
+- **AI/LLM** — provider adapters (Gemini, OpenAI, Ollama), streaming, tool-calling loop
+- **Infra** — DI container, plugin loading, settings
+- **Interfaces/CLI** — `main` → `dispatch` (Typer vs natural-language root); `--json` and `--stream` flags; multi-turn conversation (library-only via `conversation_history`)
+- **Interfaces/API** — optional FastAPI (`pip install -e ".[api]"`)
+
+Deterministic finance stays in `data` and `domain`; LLMs explain and route, they do not replace pricing engines. The canonical package tree is in [Architecture](https://copinance.github.io/copinance-os/developer-guide/architecture#package-tree-source).
 
 ## Local development
 

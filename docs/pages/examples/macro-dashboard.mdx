@@ -1,0 +1,144 @@
+# Macro Dashboard
+
+A macro regime session: run the full dashboard, drill into individual categories, and use question-driven analysis to interpret the signals. FRED API is recommended for full coverage; yfinance fallbacks cover most rate and credit proxies.
+
+## 1. Full macro dashboard (default)
+
+```bash
+copinance analyze macro
+```
+
+Runs all indicator categories — rates, credit, commodities, labor, housing, manufacturing, consumer, global, advanced — with SPY as the market reference index and a 252-day lookback. Results are saved to `.copinance/results/v2/`.
+
+## 2. Custom index and lookback
+
+```bash
+# Use QQQ as the reference; shorter lookback for recent conditions
+copinance analyze macro --market-index QQQ --lookback-days 90
+
+# Use DIA (Dow) for a value-tilt reference
+copinance analyze macro --market-index DIA --lookback-days 180
+```
+
+`--market-index` changes the trend/volatility reference. VIX and all 11 S&P sector ETFs are always fetched regardless of which index you choose.
+
+## 3. Focus on specific categories
+
+```bash
+# Rates and credit only
+copinance analyze macro \
+  --no-include-labor \
+  --no-include-housing \
+  --no-include-manufacturing \
+  --no-include-consumer \
+  --no-include-global \
+  --no-include-advanced
+
+# Labor and consumer only
+copinance analyze macro \
+  --no-include-rates \
+  --no-include-credit \
+  --no-include-commodities \
+  --no-include-housing \
+  --no-include-manufacturing \
+  --no-include-global \
+  --no-include-advanced
+```
+
+## 4. Machine-readable output
+
+```bash
+copinance analyze --json macro > macro_result.json
+
+# Extract specific fields
+copinance analyze --json macro | jq '.results.rates'
+copinance analyze --json macro | jq '.results.labor'
+copinance analyze --json macro | jq '.report.summary'
+```
+
+## 5. Question-driven interpretation
+
+Add `--question` to switch to the LLM-guided path. The model calls the macro tools and interprets the results:
+
+```bash
+copinance analyze macro --question "Is the yield curve signaling a slowdown?"
+
+copinance analyze macro --question "What does the current credit spread environment tell us about risk appetite?"
+
+copinance analyze macro --question "Summarize labor market conditions and what they imply for Fed policy."
+
+# Stream the interpretation as tokens arrive
+copinance analyze --stream macro --question "Give me an overall macro regime assessment — risk-on or risk-off?"
+```
+
+Or use the root natural-language entry for quick macro questions:
+
+```bash
+copinance "What is the current shape of the yield curve?"
+copinance "Are credit spreads tightening or widening?"
+copinance --stream "Summarize inflation and labor conditions in one paragraph."
+```
+
+## 6. Combine macro with equity context
+
+```bash
+# Get broad macro conditions first
+copinance analyze macro --question "What is the current macro backdrop?"
+
+# Then drill into a specific sector or name
+copinance analyze equity XLF --question "How are financials positioned given the current rate environment?"
+copinance analyze equity AAPL --question "How might the current macro environment affect Apple's business?"
+```
+
+## Library equivalent
+
+```python
+import asyncio
+from copinance_os.ai.llm.config import LLMConfig
+from copinance_os.infra.di import get_container
+from copinance_os.domain.models.job import Job, JobScope, JobTimeframe
+from copinance_os.domain.models.market import MarketType
+
+async def macro_dashboard():
+    container = get_container(
+        llm_config=LLMConfig(provider="gemini", api_key="your-key", model="gemini-1.5-pro"),
+        fred_api_key="your-fred-key",  # recommended
+    )
+    orchestrator = container.research_orchestrator()
+
+    job = Job(
+        scope=JobScope.MARKET,
+        market_type=MarketType.EQUITY,
+        instrument_symbol="SPY",
+        timeframe=JobTimeframe.MID_TERM,
+        execution_type="deterministic_market_analysis",
+    )
+    result = await orchestrator.run_job(job, {})
+
+    if result.success and result.report:
+        print(result.report.summary)
+        for metric, value in result.report.key_metrics.items():
+            print(f"  {metric}: {value}")
+
+asyncio.run(macro_dashboard())
+```
+
+## FRED setup
+
+A FRED API key is free and unlocks the full set of official economic series:
+
+```bash
+# Add to .env
+COPINANCEOS_FRED_API_KEY=your-fred-key
+```
+
+Get a key at: [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html)
+
+Without FRED, the system falls back to yfinance proxies for rate and credit data, and some labor/housing/manufacturing series may be unavailable.
+
+## See also
+
+- [Macro & Market Regime](../analysis-reference/macro-regime) — indicator reference and FRED series list
+- [Analysis Modes — Macro Regime Analysis](../user-guide/analysis-modes#macro-regime-analysis)
+- [CLI Reference — Macro + Market Regime](../user-guide/cli#macro--market-regime)
+- [Configuration — FRED](../getting-started/configuration#fred-api-macro-data)

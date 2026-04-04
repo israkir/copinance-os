@@ -1,0 +1,31 @@
+# Examples
+
+End-to-end worked scenarios showing how Copinance OS handles real research tasks. Each example is self-contained — you can run the commands as shown after [installation](getting-started/installation) and [configuration](getting-started/configuration).
+
+## Scenarios
+
+| Example | What it shows |
+|---------|--------------|
+| [Equity Deep Dive](examples/equity-deep-dive) | Deterministic equity analysis → question-driven follow-up → SEC filings |
+| [Macro Dashboard](examples/macro-dashboard) | Full macro regime run, FRED indicators, yield curve, credit spreads |
+| [Options Session](examples/options-session) | Options chain snapshot with BSM Greeks, positioning questions |
+
+## Prerequisites
+
+All examples assume `make setup` has been run and an LLM key is configured. Deterministic analysis (no `--question`) works without an LLM key.
+
+```bash
+# Minimum for deterministic analysis
+make setup
+source .venv/bin/activate
+
+# Add to .env for question-driven and SEC examples
+COPINANCEOS_LLM_PROVIDER=gemini
+COPINANCEOS_GEMINI_API_KEY=your-key
+
+# For macro examples with full FRED data
+COPINANCEOS_FRED_API_KEY=your-fred-key
+
+# For SEC filing examples
+EDGAR_IDENTITY="Your Name you@example.com"
+```

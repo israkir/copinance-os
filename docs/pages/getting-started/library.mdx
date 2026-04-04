@@ -36,25 +36,26 @@ This guide is for developers who want to integrate Copinance OS into their own P
 
 Install Copinance OS as a dependency in your project.
 
-**From PyPI:** When **`copinance-os`** is published, `pip install copinance-os`. Until then, use **from source** (below).
-
-**From source (development or git clone):**
+**From source:**
 ```bash
 pip install -e /path/to/copinance-os
-# or from repo root:
+# or from the repo root:
 pip install -e .
 ```
 
 **Optional: local LLM (Ollama):**
 ```bash
-pip install copinance-os[ollama]
+pip install -e ".[ollama]"
 ```
 
-Add to your `requirements.txt` or `pyproject.toml` after **PyPI** release, or depend on a **path / git** URL until then:
+Depend on a **path** or **git** URL in your `requirements.txt` or `pyproject.toml`:
 ```
-copinance-os>=0.1.0
-# Optional:
-# copinance-os[ollama]>=0.1.0
+# requirements.txt (git URL)
+git+https://github.com/copinance/copinance-os.git
+
+# pyproject.toml (editable local path)
+[tool.uv.sources]
+copinance-os = { path = "../copinance-os", editable = true }
 ```
 
 ---
@@ -150,7 +151,7 @@ container = get_container(
 - **`cache_enabled`** / **`cache_manager`:** Optional. See [Cache](#cache) below.
 - **`storage_type`** / **`storage_path`:** Optional. See [Storage and Persistence](#storage-and-persistence) below. Use `storage_type="memory"` to avoid creating a `.copinance` directory on disk.
 
-**Performance:** The container is created only on first use (lazy proxy), and use cases and providers are singletons created when first requested. See [Architecture — Container and performance](/developer-guide/architecture#container-and-performance) for details.
+**Performance:** The container is created only on first use (lazy proxy), and use cases and providers are singletons created when first requested. See [Architecture — Container and performance](../developer-guide/architecture#container-and-performance) for details.
 
 ### LLMConfig (required for question-driven analysis)
 
@@ -603,7 +604,7 @@ Get the container with `get_container(...)` from `copinance_os.infra.di`. You ca
 | **Infrastructure** | `container.market_data_provider()` | `MarketDataProvider` | Market data (quote, history, search, options) |
 | | `container.cache_manager()` | `CacheManager` | Cache for tool/CLI data |
 
-The **`JobRunner`** port is not exposed as a container method; customize orchestration via **`ResearchOrchestrator`**, executor lists, or a custom **`Container`** (see [Extending](/developer-guide/extending)).
+The **`JobRunner`** port is not exposed as a container method; customize orchestration via **`ResearchOrchestrator`**, executor lists, or a custom **`Container`** (see [Extending](../developer-guide/extending)).
 
 **Imports:** Container from `copinance_os.infra.di`; request/response types from the modules below.
 
@@ -617,7 +618,7 @@ DTOs for quote/history/options/instrument are defined in **`copinance_os.domain.
 | Get instrument | `GetInstrumentRequest` | `GetInstrumentResponse` | `symbol` (required). Response: `instrument: Stock \| None` |
 | Get quote | `GetQuoteRequest` | `GetQuoteResponse` | `symbol` (required). Response: `quote: dict`, `symbol: str` |
 | Get historical data | `GetHistoricalDataRequest` | `GetHistoricalDataResponse` | `symbol`, `start_date`, `end_date` (required; `datetime`), `interval` (default `"1d"`). Response: `data: list[MarketDataPoint]`, `symbol` |
-| Get options chain | `GetOptionsChainRequest` | `GetOptionsChainResponse` | `underlying_symbol` (required), `expiration_date: str \| None` (YYYY-MM-DD). Response: `chain: OptionsChain`, `underlying_symbol`. With the default container, each `OptionContract` may include `greeks` (BSM estimates via QuantLib) when spot and implied vol are available; see [Analytics — Options chain metadata](/analytics/options-chain-metadata). |
+| Get options chain | `GetOptionsChainRequest` | `GetOptionsChainResponse` | `underlying_symbol` (required), `expiration_date: str \| None` (YYYY-MM-DD). Response: `chain: OptionsChain`, `underlying_symbol`. With the default container, each `OptionContract` may include `greeks` (BSM estimates via QuantLib) when spot and implied vol are available; see [Options & Greeks](../analysis-reference/options-and-greeks). |
 
 **Enum:** `InstrumentSearchMode` in the same module (`auto`, `symbol`, `general`).
 
@@ -745,7 +746,7 @@ The **`.copinance`** directory (e.g. `data/`, `equities.json`) is created by the
 
 For a long-running app you may want file persistence: keep the default (or set `storage_type="file"` and optionally `storage_path`). In-memory storage loses data when the process exits.
 
-The library does not impose a database. You can implement the repository and storage ports (see [Developer Guide](/developer-guide/extending)) and wire them into the container if you need PostgreSQL, MongoDB, etc.
+The library does not impose a database. You can implement the repository and storage ports (see [Developer Guide](../developer-guide/extending)) and wire them into the container if you need PostgreSQL, MongoDB, etc.
 
 ---
 
@@ -756,7 +757,7 @@ The default **`JobRunner`** (used inside **`ResearchOrchestrator.run_job`**) fin
 - **Replace job orchestration:** implement the **`JobRunner`** port (`async def run(job, context) -> RunJobResult`) and construct a **`ResearchOrchestrator`** (or custom façade) with it—there is no `container.job_runner()` accessor on the stock **`Container`**.
 - **Use analysis executors yourself:** resolve `container.analysis_executors()` and call `validate(job)` / `execute(job, context)` on the executor that validates.
 
-See [Architecture](/developer-guide/architecture) and [Extending](/developer-guide/extending) for ports and extension points.
+See [Architecture](../developer-guide/architecture) and [Extending](../developer-guide/extending) for ports and extension points.
 
 ---
 
@@ -820,7 +821,7 @@ asyncio.run(main())
 ## Next Steps
 
 - [Configuration](configuration) — LLM and FRED setup, env vars, security.
-- [User Guide — CLI](/user-guide/cli) — Full Typer reference, including **`--json`** for machine-readable output.
-- [API Reference](/api-reference/data-providers) — Data provider interfaces and market point coercion helpers.
-- [Architecture](/developer-guide/architecture) — Hexagonal layout, ports, container, and [annotated package tree](/developer-guide/architecture#package-tree-source).
-- [Extending](/developer-guide/extending) — Custom data providers, executors, and tests.
+- [User Guide — CLI](../user-guide/cli) — Full Typer reference, including **`--json`** for machine-readable output.
+- [API Reference](../developer-guide/api-reference) — Data provider interfaces and market point coercion helpers.
+- [Architecture](../developer-guide/architecture) — Hexagonal layout, ports, container, and [annotated package tree](../developer-guide/architecture#package-tree-source).
+- [Extending](../developer-guide/extending) — Custom data providers, executors, and tests.

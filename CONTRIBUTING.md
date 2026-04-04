@@ -1,173 +1,121 @@
 # Contributing to Copinance OS
 
-Thank you for your interest in contributing to Copinance OS! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing. This document covers workflow, standards, and extension patterns.
 
 ## Code of Conduct
 
-This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to maintainers@copinance-os.org.
+This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). Please report unacceptable behavior to maintainers@copinance-os.org.
 
 ## Getting Started
 
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/copinance-os.git`
-3. Install development dependencies: run `make setup` (creates `.venv`, installs deps, and pre-commit), or manually: `python3 -m venv .venv`, activate it, then `pip install -e ".[dev]"`
+3. Set up your environment: `make setup` (creates `.venv`, installs deps, and pre-commit hooks)
 4. Create a branch: `git checkout -b feature/your-feature-name`
 
 ## Development Workflow
 
-### Setting Up Your Environment
+### Environment
 
 ```bash
-# Install in development mode with all dependencies
-pip install -e ".[dev]"
+make setup        # one-step: venv + deps + pre-commit
+source .venv/bin/activate
+```
 
-# Install pre-commit hooks
+Or manually:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 pre-commit install
 ```
 
-### Code Style
+### Code quality
 
-We follow Python best practices:
+All three checks must pass before committing:
 
-- **Black** for code formatting (line length: 100)
-- **Ruff** for linting
-- **mypy** for type checking
-- Type hints required for all functions
+```bash
+make quality      # black + ruff + mypy (all at once)
+```
 
-Format your code before committing:
-
+Or individually:
 ```bash
 black src/ tests/
 ruff check src/ tests/ --fix
 mypy src/
 ```
 
+Pre-commit hooks run `black` and `ruff` automatically on every edited `.py` file.
+
 ### Testing
 
-All code must include tests:
-
-- Unit tests for individual components
-- Integration tests for external integrations and use cases
-- Mark tests appropriately: `@pytest.mark.unit`, `@pytest.mark.integration`
-
-Run tests:
-
 ```bash
-# All tests
-pytest
-
-# With coverage
-make coverage
-# or: pytest --cov=copinance_os --cov-report=html --cov-report=term-missing
-# Open report: file://<project-root>/htmlcov/index.html
-
-# Specific markers
+make test           # full suite with coverage
+pytest --no-cov     # fast loop without coverage
 pytest -m unit
 pytest -m integration
+make coverage       # test + open HTML report
 ```
 
-### Commit Messages
+### Commit messages
 
-Use clear, descriptive commit messages. A commit message template is available in [`.gitmessage`](.gitmessage) to help you follow these conventions:
+Follow conventional commit format:
 
 ```
-feat: add sentiment analysis
+feat: add sentiment analysis tool
 fix: correct market search case sensitivity
-docs: update API documentation
+docs: update CLI reference
 test: add tests for analyze use case
 refactor: simplify repository interface
+chore: bump dependency versions
 ```
 
-Prefixes:
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation changes
-- `test:` Test additions or changes
-- `refactor:` Code refactoring
-- `chore:` Maintenance tasks
+A commit message template is available in [`.gitmessage`](.gitmessage).
 
-## Architecture Guidelines
+## Architecture guidelines
 
-### Layer Responsibilities
+### Layer responsibilities
 
-1. **Domain Layer** (`domain/`)
-   - Entities, validation, pure strategy protocols
-   - No I/O; defines ports (interfaces)
+| Layer | Path | Responsibility |
+|-------|------|----------------|
+| **Domain** | `domain/` | Entities, value objects, ports (interfaces), domain services. No I/O. |
+| **Research** | `research/workflows/` | Use cases (analyze, market, profile, fundamentals, backtest). Thin — delegate to orchestrator. |
+| **Data** | `data/` | Providers, cache, repositories, analytics adapters. Implements domain ports. |
+| **Core** | `core/` | Orchestrator (`ResearchOrchestrator`, `DefaultJobRunner`), execution engine, pipeline tools. |
+| **AI** | `ai/` | LLM provider adapters, streaming, prompt templates. Explanation/summarization — not numerical truth. |
+| **Infra** | `infra/` | Settings, logging, DI composition root (`infra/di/`). The only place all layers are imported together. |
+| **Interfaces** | `interfaces/cli/` | CLI entry (`main`, `dispatch`, lazy Typer `root`, `commands/`). Maps user input to use cases and the container. |
 
-2. **Research layer — use cases** (`research/workflows/`)
-   - Typed requests and use cases (market, analyze, profile, fundamentals, backtest); analysis jobs run through **`ResearchOrchestrator`**, **`DefaultJobRunner`**, and **`AnalysisExecutor`** implementations
-   - Prefer YAML/JSON for reproducible simple long-only backtests (`backtest_config.py`)
+Key rules:
+- `domain/` imports nothing from this project except other domain modules
+- `infra/di/` is the composition root — the only place all layers are wired together; no business logic here
+- `core/` must not import `research/`; workflow request types that executors need belong in `domain/models/`
 
-3. **Data Layer** (`data/`)
-   - Providers, cache, repositories, analytics adapters
-   - Implements domain ports; ingestion and persistence only
-
-4. **Core** (`core/`)
-   - Orchestrator (`ResearchOrchestrator`, `DefaultJobRunner`, runners), execution engine (executors), pipeline tools
-
-5. **AI Layer** (`ai/`)
-   - LLM providers and analyzers (explanation/summarization; not numerical truth)
-
-6. **Infra** (`infra/`)
-   - Settings (`infra/config/`), logging, DI composition root (`infra/di/`). Executable wiring factories are **`AnalysisExecutorFactory`** (`core/execution_engine/factory.py`) and **`LLMAnalyzerFactory`** (`ai/llm/analyzer_factory.py`), not a separate `infra/factories` tree.
-
-7. **Interfaces** (`interfaces/cli/`)
-   - CLI entry (`main`, `dispatch`, lazy Typer `root`, `commands/`); maps user input to use cases and the DI container
-
-### Best Practices
-
-- **Dependency Inversion**: Depend on abstractions, not implementations
-- **Single Responsibility**: Each class/function should have one clear purpose
-- **Open/Closed Principle**: Open for extension, closed for modification
-- **Interface Segregation**: Prefer small, focused interfaces
-- **DRY**: Don't repeat yourself - refactor common code
-- **Type Safety**: Use type hints everywhere
-- **Testability**: Write testable code with dependency injection
-
-### Adding New Features
-
-When adding features, follow these steps:
+### Adding a new feature
 
 1. **Domain**: Define entities and ports if needed
 2. **Research use cases**: Add or extend modules in `research/workflows/`
 3. **Data / core / ai**: Implement adapters, executors, or LLM wiring as appropriate
 4. **Interfaces**: Add CLI commands if needed
 5. **Tests**: Mirror package layout under `tests/unit/copinance_os/`
-6. **Documentation**: Update README and docstrings
+6. **Documentation**: Update relevant docs in `docs/pages/` and docstrings
 
-## Pull Request Process
+## Pull request process
 
-**Important**: Try to create atomic PRs: each pull request should focus on a single change or feature implementation. Avoid bulk implementations to ensure a better code review experience. Use the [pull request template](.github/pull_request_template.md) to structure your PR description.
+PRs should be atomic — one change or feature per PR. Use the [pull request template](.github/pull_request_template.md).
 
-1. **Update Tests**: Ensure all tests pass and add new ones
-2. **Update Documentation**: Update README, docstrings, and comments
-3. **Code Quality**: Run black, ruff, and mypy
-4. **Commit Quality**: Use conventional commit messages
-5. **PR Description**: Clearly describe changes and rationale
-6. **Link Issues**: Reference related issues in PR description
+### Checklist
 
-### PR Checklist
+- [ ] `make quality` passes (black + ruff + mypy)
+- [ ] `make test` passes (or `pytest -m unit` at minimum)
+- [ ] Tests added or updated for the change
+- [ ] Documentation updated (docs/pages/, docstrings, README if applicable)
+- [ ] CHANGELOG updated for significant changes
+- [ ] Commit messages follow conventional format
 
-- [ ] Code is formatted (`black`)
-- [ ] Linting passes (`ruff`)
-- [ ] Type checking passes (`mypy`)
-- [ ] Tests pass (`pytest`)
-- [ ] Documentation is updated
-- [ ] CHANGELOG is updated (for significant changes)
-- [ ] Commit messages follow conventions
+## Adding analysis executors
 
-## Adding New Analysis Executors
-
-The library uses **analysis executors** (implementing the `AnalysisExecutor` port) to run deterministic or question-driven analysis. Use `execution_type_from_scope_and_mode(scope, mode)` from `copinance_os.domain.models.analysis` when building jobs from requests.
-
-To add a new executor:
-
-1. Create a class implementing `AnalysisExecutor` interface
-2. Implement `execute()`, `validate()`, and `get_executor_id()`
-3. Add tests for the executor
-4. Register it with DI: extend **`AnalysisExecutorFactory.create_all`** (`copinance_os.core.execution_engine.factory`) and ensure `infra/di/use_cases.py` still exposes your executor list—or override **`container.analysis_executors`** in a custom container (see [Extending](https://copinance.github.io/copinance-os/developer-guide/extending))
-
-Example:
+Executors implement the `AnalysisExecutor` port and run inside `DefaultJobRunner`:
 
 ```python
 from copinance_os.domain.ports.analysis_execution import AnalysisExecutor
@@ -185,29 +133,27 @@ class MyAnalysisExecutor(AnalysisExecutor):
         return "my_executor"
 ```
 
-## Adding New Tools
+Register by extending `AnalysisExecutorFactory.create_all` in `copinance_os.core.execution_engine.factory`, or override `container.analysis_executors` in a custom container. Use `execution_type_from_scope_and_mode(scope, mode)` from `copinance_os.domain.models.analysis` when building jobs.
 
-Tools are self-describing functions that wrap data providers or other functionality for use by LLMs or independently. To add a new tool:
+## Adding tools
 
-1. Create a class implementing the `Tool` interface from `domain/ports/tools.py`
-2. Implement `get_name()`, `get_description()`, `get_schema()`, and `execute()`
-3. Add tests for the tool
-4. Wire the tool through a bundle factory and `PluginSpec` in `core.pipeline.tools.discovery` (or add a `tool_bundle_factory` in `core.pipeline.tools.bundles` for scan), or register manually on `ToolRegistry` for experiments
+Tools wrap data providers or standalone logic for use by LLMs in question-driven analysis:
 
-### For Data Provider Tools
+1. Implement the `Tool` interface from `domain/ports/tools.py`
+2. Add tests
+3. Wire through a bundle factory and `PluginSpec` in `core.pipeline.tools.discovery`, or add a `tool_bundle_factory` in `core.pipeline.tools.bundles` for package scan
 
-If your tool wraps a data provider, extend `BaseDataProviderTool`:
+### Data provider tools
+
+Extend `BaseDataProviderTool` for tools that wrap a provider:
 
 ```python
-from typing import Any
-
+from copinance_os.core.pipeline.tools.data_provider.base import BaseDataProviderTool
 from copinance_os.domain.ports.data_providers import MarketDataProvider
 from copinance_os.domain.ports.tools import ToolResult, ToolSchema
-from copinance_os.core.pipeline.tools.data_provider.base import BaseDataProviderTool
+from typing import Any
 
 class MyDataProviderTool(BaseDataProviderTool[MarketDataProvider]):
-    """Tool for getting custom data."""
-
     def get_name(self) -> str:
         return "get_custom_data"
 
@@ -220,10 +166,7 @@ class MyDataProviderTool(BaseDataProviderTool[MarketDataProvider]):
             description=self.get_description(),
             parameters={
                 "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Stock ticker symbol",
-                    }
+                    "symbol": {"type": "string", "description": "Stock ticker symbol"}
                 },
                 "required": ["symbol"],
             },
@@ -234,26 +177,19 @@ class MyDataProviderTool(BaseDataProviderTool[MarketDataProvider]):
 
     async def _execute_impl(self, **kwargs: Any) -> ToolResult:
         validated = self.validate_parameters(**kwargs)
-        symbol = validated["symbol"]
-
-        data = await self._provider.get_custom_data(symbol)
-
-        return self._create_success_result(
-            data=data,
-            metadata={"symbol": symbol},
-        )
+        data = await self._provider.get_custom_data(validated["symbol"])
+        return self._create_success_result(data=data, metadata={"symbol": validated["symbol"]})
 ```
 
-### For Standalone Tools
+### Standalone tools
 
-For tools that don't wrap data providers, implement `Tool` directly:
+Implement `Tool` directly for tools that don't wrap a provider:
 
 ```python
 from copinance_os.domain.ports.tools import Tool, ToolResult, ToolSchema
+from typing import Any
 
 class MyStandaloneTool(Tool):
-    """Tool for performing custom operations."""
-
     def get_name(self) -> str:
         return "my_custom_tool"
 
@@ -266,37 +202,23 @@ class MyStandaloneTool(Tool):
             description=self.get_description(),
             parameters={
                 "type": "object",
-                "properties": {
-                    "input": {
-                        "type": "string",
-                        "description": "Input parameter",
-                    }
-                },
+                "properties": {"input": {"type": "string", "description": "Input parameter"}},
                 "required": ["input"],
             },
         )
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         validated = self.validate_parameters(**kwargs)
-        # Perform operation
         result = self._perform_operation(validated["input"])
         return ToolResult(success=True, data=result)
 ```
 
-## Adding New Repository Implementations
+## Adding data providers
 
-To add a new repository (e.g., PostgreSQL):
-
-1. Create implementation in `data/repositories/`
-2. Implement the appropriate repository interface from `domain/ports/`
-3. Wire settings in `infra/config/` (pydantic-settings) and `infra/di/` if needed
-4. Add tests
-5. Update dependency injection
+See [Developer Guide — Extending](https://copinance.github.io/copinance-os/developer-guide/extending) for step-by-step instructions including the `domain/ports/` interface selection, container registration, and test patterns.
 
 ## Questions?
 
-- Open an issue for questions about architecture or design
+- Open an [issue](https://github.com/copinance/copinance-os/issues) for architecture or design questions
 - Check existing issues and PRs for similar work
-- Reach out to maintainers for guidance
-
-Thank you for contributing to Copinance OS! 🚀
+- [Discussions](https://github.com/copinance/copinance-os/discussions) for open-ended conversation
