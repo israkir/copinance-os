@@ -14,6 +14,7 @@ from copinance_os.data.schemas.market_data_conversions import (
     coerce_sorted_market_data_points,
     price_series_from_market_data_points,
 )
+from copinance_os.domain.literacy import resolve_financial_literacy
 from copinance_os.domain.models.analysis import INSTRUMENT_DETERMINISTIC_TYPE
 from copinance_os.domain.models.fundamentals import (
     GetStockFundamentalsRequest,
@@ -337,6 +338,7 @@ class InstrumentAnalysisExecutor(BaseAnalysisExecutor):
                 quote,
                 symbol,
                 pos_window,
+                financial_literacy=resolve_financial_literacy(context.get("financial_literacy")),
             )
             out["positioning"] = OptionsPositioningResult.model_validate(pos_raw).model_dump(
                 mode="json"

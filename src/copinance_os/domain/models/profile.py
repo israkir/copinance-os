@@ -8,7 +8,12 @@ from copinance_os.domain.models.base import Entity
 
 
 class FinancialLiteracy(StrEnum):
-    """Financial literacy levels for analysis output adaptation."""
+    """Audience depth for analysis wording (profile + job context).
+
+    Use :func:`copinance_os.domain.literacy.resolve_financial_literacy` when reading optional
+    context values, and :class:`copinance_os.domain.literacy.TieredCopy` for deterministic
+    multi-tier strings in ``copinance_os.data.literacy`` (one module per feature).
+    """
 
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
