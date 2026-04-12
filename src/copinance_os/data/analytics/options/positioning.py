@@ -8,8 +8,11 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from copinance_os.data.analytics.options.contract_numeric import contract_numeric
+from copinance_os.data.literacy import options_positioning as _pt
+from copinance_os.domain.literacy import resolve_financial_literacy
 from copinance_os.domain.models.market import OptionContract, OptionsChain
 from copinance_os.domain.models.options_positioning import OptionsPositioningResult
+from copinance_os.domain.models.profile import FinancialLiteracy
 from copinance_os.domain.ports.data_providers import MarketDataProvider
 
 
@@ -139,21 +142,22 @@ def _compute_volatility_signals(
     nearest_exp: str | None,
     underlying: float,
     all_iv_samples: list[float],
+    lit: FinancialLiteracy,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not nearest_exp or underlying <= 0:
         return (
             [
                 {
-                    "name": "ATM Implied Volatility",
+                    "name": _pt.name_atm_iv(lit),
                     "value": 0.0,
                     "direction": "neutral",
-                    "explanation": "Insufficient chain or spot data to estimate ATM implied volatility.",
+                    "explanation": _pt.expl_iv_insufficient(lit),
                 },
                 {
-                    "name": "Intra-Chain IV Rank",
+                    "name": _pt.name_iv_rank(lit),
                     "value": 0.5,
                     "direction": "neutral",
-                    "explanation": "IV rank unavailable without a usable volatility sample across the chain.",
+                    "explanation": _pt.expl_iv_rank_no_iv(lit),
                 },
             ],
             {"atm_iv": 0.0, "iv_rank": 0.5},
@@ -173,16 +177,16 @@ def _compute_volatility_signals(
         return (
             [
                 {
-                    "name": "ATM Implied Volatility",
+                    "name": _pt.name_atm_iv(lit),
                     "value": 0.0,
                     "direction": "neutral",
-                    "explanation": "No quoted implied volatility near the money for the nearest expiration.",
+                    "explanation": _pt.expl_iv_no_quotes_near_money(lit),
                 },
                 {
-                    "name": "Intra-Chain IV Rank",
+                    "name": _pt.name_iv_rank(lit),
                     "value": round(_percentile_rank(0.0, all_iv_samples), 4),
                     "direction": "neutral",
-                    "explanation": "How current ATM IV ranks versus all IV prints in this chain snapshot.",
+                    "explanation": _pt.expl_iv_rank_degenerate(lit),
                 },
             ],
             {"atm_iv": 0.0, "iv_rank": _percentile_rank(0.0, all_iv_samples)},
@@ -207,22 +211,16 @@ def _compute_volatility_signals(
 
     signals = [
         {
-            "name": "ATM Implied Volatility",
+            "name": _pt.name_atm_iv(lit),
             "value": round(atm_iv, 4),
             "direction": iv_dir,
-            "explanation": (
-                "At-the-money implied volatility for the nearest listed expiration — "
-                "the market’s baseline fear / demand for premium at spot."
-            ),
+            "explanation": _pt.expl_atm_iv_main(lit),
         },
         {
-            "name": "Intra-Chain IV Rank",
+            "name": _pt.name_iv_rank(lit),
             "value": round(iv_rank, 4),
             "direction": rank_dir,
-            "explanation": (
-                "Percentile of ATM IV versus all implied volatilities observed in this chain snapshot "
-                "(0 = lowest, 1 = highest)."
-            ),
+            "explanation": _pt.expl_iv_rank_main(lit),
         },
     ]
     return signals, {"atm_iv": round(atm_iv, 4), "iv_rank": iv_rank}
@@ -235,9 +233,10 @@ def _compute_surface_signals(
     second_exp: str | None,
     underlying: float,
     near_atm_iv: float,
+    lit: FinancialLiteracy,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     skew_val = 0.0
-    skew_expl = "Not enough delta quotes to estimate 25-delta skew for the nearest expiration."
+    skew_expl = _pt.expl_skew_insufficient(lit)
     if nearest_exp and underlying > 0:
         c_near = _contracts_for_expiration(calls, nearest_exp)
         p_near = _contracts_for_expiration(puts, nearest_exp)
@@ -265,14 +264,11 @@ def _compute_surface_signals(
             put_iv = 0.0
         if call_25 is not None and put_25 is not None:
             skew_val = round(put_iv - call_iv, 4)
-            skew_expl = (
-                "IV of the ~25-delta put minus the ~25-delta call (nearest expiry). "
-                "Positive skew often reflects downside protection demand."
-            )
+            skew_expl = _pt.expl_skew_ok(lit)
 
     far_atm_iv = 0.0
     slope: Literal["contango", "backwardation", "flat"] = "flat"
-    slope_expl = "Need two expirations with ATM IV to infer term structure."
+    slope_expl = _pt.expl_term_need_two(lit)
     if second_exp and underlying > 0:
         c2 = _contracts_for_expiration(calls, second_exp)
         p2 = _contracts_for_expiration(puts, second_exp)
@@ -301,10 +297,7 @@ def _compute_surface_signals(
                     slope = "backwardation"
                 else:
                     slope = "flat"
-                slope_expl = (
-                    f"ATM IV moves from {near_atm_iv:.1f}% (near) to {far_atm_iv:.1f}% (next slice) — "
-                    f"{slope.replace('_', ' ')}."
-                )
+                slope_expl = _pt.expl_term_move(lit, near_atm_iv, far_atm_iv, slope)
 
     skew_dir: Literal["bullish", "bearish", "neutral"] = (
         "bearish" if skew_val > 2.0 else "bullish" if skew_val < -1.0 else "neutral"
@@ -313,13 +306,13 @@ def _compute_surface_signals(
 
     signals = [
         {
-            "name": "25-Delta Skew",
+            "name": _pt.name_skew_25d(lit),
             "value": skew_val,
             "direction": skew_dir,
             "explanation": skew_expl,
         },
         {
-            "name": "Term Structure",
+            "name": _pt.name_term_structure(lit),
             "value": round(far_atm_iv - near_atm_iv, 4) if second_exp else 0.0,
             "direction": term_dir,
             "explanation": slope_expl,
@@ -335,7 +328,7 @@ def _compute_surface_signals(
 
 
 def _compute_flow_signals(
-    calls: list[OptionContract], puts: list[OptionContract]
+    calls: list[OptionContract], puts: list[OptionContract], lit: FinancialLiteracy
 ) -> list[dict[str, Any]]:
     flagged = 0
     vol_threshold = 500
@@ -362,28 +355,25 @@ def _compute_flow_signals(
 
     return [
         {
-            "name": "Unusual Activity Score",
+            "name": _pt.name_unusual_activity(lit),
             "value": unusual_score,
             "direction": unusual_dir,
-            "explanation": (
-                f"Counts strikes where volume is elevated versus open interest (ratio > 2, "
-                f"volume > {vol_threshold}), scaled into a 0–100-style intensity score."
-            ),
+            "explanation": _pt.expl_unusual_activity(lit, vol_threshold),
         },
         {
-            "name": "Aggregate Volume / OI",
+            "name": _pt.name_agg_vol_oi(lit),
             "value": round(agg_ratio, 4),
             "direction": flow_dir,
-            "explanation": (
-                "Total options volume divided by total open interest — higher values can "
-                "indicate more tactical trading versus stuck inventory."
-            ),
+            "explanation": _pt.expl_agg_vol_oi(lit),
         },
     ]
 
 
 def _compute_gamma_regime(
-    calls: list[OptionContract], puts: list[OptionContract], underlying: float
+    calls: list[OptionContract],
+    puts: list[OptionContract],
+    underlying: float,
+    lit: FinancialLiteracy,
 ) -> tuple[
     list[dict[str, Any]], float, Literal["positive_gamma", "negative_gamma", "neutral"], str
 ]:
@@ -405,37 +395,29 @@ def _compute_gamma_regime(
 
     if gross < 1e-6:
         regime: Literal["positive_gamma", "negative_gamma", "neutral"] = "neutral"
-        expl = "Gamma exposure is negligible in this snapshot — regime is effectively neutral."
+        expl = _pt.expl_gamma_neutral_flat(lit)
     else:
         rel = net / gross
         if rel > 0.06:
             regime = "positive_gamma"
-            expl = (
-                "Net gamma is positive — dealers are more likely to stabilize moves "
-                "(fade extremes) if this positioning persists."
-            )
+            expl = _pt.expl_gamma_positive(lit)
         elif rel < -0.06:
             regime = "negative_gamma"
-            expl = (
-                "Net gamma is negative — convexity can amplify moves as hedgers chase delta "
-                "in trending conditions."
-            )
+            expl = _pt.expl_gamma_negative(lit)
         else:
             regime = "neutral"
-            expl = "Gamma is balanced — neither strong stabilization nor strong convexity amplification."
+            expl = _pt.expl_gamma_balanced(lit)
 
     net_rounded = round(net, 4)
     signals = [
         {
-            "name": "Net Gamma Exposure",
+            "name": _pt.name_net_gamma(lit),
             "value": net_rounded,
             "direction": "bullish" if net > 0 else "bearish" if net < 0 else "neutral",
-            "explanation": (
-                "Sum of gamma × OI × 100 × spot for calls minus puts — a coarse dealer-gamma proxy."
-            ),
+            "explanation": _pt.expl_net_gamma(lit),
         },
         {
-            "name": "Gamma Regime",
+            "name": _pt.name_gamma_regime(lit),
             "value": (
                 1.0 if regime == "positive_gamma" else -1.0 if regime == "negative_gamma" else 0.0
             ),
@@ -532,26 +514,6 @@ def _compute_implied_move(
     return round(pct, 4), round(straddle, 4)
 
 
-def _build_analyst_summary(symbol: str, bias: str, confidence: float, window: str) -> str:
-    tone = (
-        "the aggregate options surface leans bullish — more call-heavy OI and flow"
-        if bias == "bullish"
-        else (
-            "the aggregate options surface leans bearish — more defensive put weight "
-            "or softer call demand"
-            if bias == "bearish"
-            else "the options surface is mixed — no strong one-sided aggregate skew yet"
-        )
-    )
-    horizon = "next 1-2 weeks" if window == "near" else "next 1-2 months"
-    return (
-        f"For {symbol}, {tone}. That reflects overall market positioning in the chain, "
-        f"not a specific actor; heavy clusters can sometimes line up with large books, "
-        f"but we do not label institutions. "
-        f"Model confidence is {confidence * 100:.0f}% for the {horizon} horizon."
-    )
-
-
 def build_options_positioning_dict(
     chain: OptionsChain,
     calls: list[OptionContract],
@@ -559,8 +521,14 @@ def build_options_positioning_dict(
     quote: dict[str, Any],
     symbol: str,
     window: Literal["near", "mid"],
+    financial_literacy: FinancialLiteracy | str | None = None,
 ) -> dict[str, Any]:
-    """Build the full positioning payload dict (validated by ``OptionsPositioningResult``)."""
+    """Build the full positioning payload dict (validated by ``OptionsPositioningResult``).
+
+    ``financial_literacy`` controls plain-language depth (beginner / intermediate / advanced).
+    Omitted or invalid values default to **intermediate** (legacy copy).
+    """
+    lit = resolve_financial_literacy(financial_literacy)
     up = chain.underlying_price
     underlying = _safe_float(up, _safe_float(quote.get("current_price")))
 
@@ -617,48 +585,42 @@ def build_options_positioning_dict(
 
     signals = [
         {
-            "name": "Call Open Interest Share",
+            "name": _pt.name_call_oi_share(lit),
             "value": round(call_oi_ratio, 3),
             "direction": (
                 "bullish"
                 if call_oi_ratio >= 0.52
                 else "bearish" if call_oi_ratio <= 0.45 else "neutral"
             ),
-            "explanation": (
-                "A larger share of call OI points to aggregate upside interest "
-                "in the chain — sometimes consistent with sizable call interest, "
-                "but not exclusive to any one player."
-            ),
+            "explanation": _pt.expl_call_oi_share(lit),
         },
         {
-            "name": "Put/Call OI Ratio",
+            "name": _pt.name_put_call_oi(lit),
             "value": round(put_call_oi_ratio, 3),
             "direction": (
                 "bearish"
                 if put_call_oi_ratio >= 1.1
                 else "bullish" if put_call_oi_ratio <= 0.9 else "neutral"
             ),
-            "explanation": (
-                "Elevated put/call OI can indicate hedging pressure or defensive positioning."
-            ),
+            "explanation": _pt.expl_put_call_oi(lit),
         },
         {
-            "name": "Intraday Options Flow (Calls Share)",
+            "name": _pt.name_flow_calls_share(lit),
             "value": round(call_flow_ratio, 3),
             "direction": (
                 "bullish"
                 if call_flow_ratio >= 0.53
                 else "bearish" if call_flow_ratio <= 0.47 else "neutral"
             ),
-            "explanation": "Call-heavy volume relative to puts may indicate bullish tactical flow.",
+            "explanation": _pt.expl_flow_calls_share(lit),
         },
         {
-            "name": "Gamma Tilt",
+            "name": _pt.name_gamma_tilt(lit),
             "value": round(gamma_tilt, 3),
             "direction": (
                 "bullish" if gamma_tilt > 0.05 else "bearish" if gamma_tilt < -0.05 else "neutral"
             ),
-            "explanation": "Positive gamma tilt can support stabilization and upside continuation.",
+            "explanation": _pt.expl_gamma_tilt(lit),
         },
     ]
 
@@ -674,11 +636,11 @@ def build_options_positioning_dict(
     ]
 
     vol_sigs, vol_partial = _compute_volatility_signals(
-        calls, puts, nearest_exp, underlying, all_iv_samples
+        calls, puts, nearest_exp, underlying, all_iv_samples, lit
     )
     near_atm = float(vol_partial.get("atm_iv") or 0.0)
     surface_sigs, surface_partial = _compute_surface_signals(
-        calls, puts, nearest_exp, second_exp, underlying, near_atm
+        calls, puts, nearest_exp, second_exp, underlying, near_atm, lit
     )
 
     iv_rank_val = float(vol_partial.get("iv_rank") or 0.5)
@@ -687,13 +649,11 @@ def build_options_positioning_dict(
         atm_row = vol_sigs[0]
         volatility_category = [
             {
-                "name": "ATM Implied Volatility · IV Rank",
+                "name": _pt.name_vol_combo_atm_iv_rank(lit),
                 "value": float(atm_row.get("value") or 0.0),
                 "direction": atm_row.get("direction", "neutral"),
-                "explanation": (
-                    f"ATM IV is {float(atm_row.get('value') or 0.0):.2f}% (percentage points). "
-                    f"Intra-chain IV rank {iv_rank_val:.0%} — how that ATM print ranks versus "
-                    f"all implied volatilities in this snapshot."
+                "explanation": _pt.expl_vol_combo(
+                    lit, float(atm_row.get("value") or 0.0), iv_rank_val
                 ),
             }
         ]
@@ -709,8 +669,10 @@ def build_options_positioning_dict(
         "far_term_atm_iv": float(surface_partial.get("far_term_atm_iv") or 0.0),
     }
 
-    flow_sigs = _compute_flow_signals(calls, puts)
-    gamma_sigs, _net_g, regime, regime_explanation = _compute_gamma_regime(calls, puts, underlying)
+    flow_sigs = _compute_flow_signals(calls, puts, lit)
+    gamma_sigs, _net_g, regime, regime_explanation = _compute_gamma_regime(
+        calls, puts, underlying, lit
+    )
 
     max_pain_strike = _compute_max_pain(calls, puts, nearest_exp)
     implied_move_pct, implied_move_abs = _compute_implied_move(calls, puts, nearest_exp, underlying)
@@ -720,30 +682,22 @@ def build_options_positioning_dict(
 
     structure_sigs = [
         {
-            "name": "Max Pain Strike",
+            "name": _pt.name_max_pain(lit),
             "value": round(max_pain_val, 4) if max_pain_strike else 0.0,
             "direction": "neutral",
-            "explanation": (
-                "Strike that minimizes total intrinsic value paid to option holders at expiration "
-                "(nearest expiry only) — a common magnet narrative, not a forecast."
-            ),
+            "explanation": _pt.expl_max_pain(lit),
         },
         {
-            "name": "Strike Magnets (OI)",
+            "name": _pt.name_strike_magnets(lit),
             "value": float(len(oi_clusters)),
             "direction": "neutral",
-            "explanation": (
-                "Largest open-interest strikes in the nearest expiration — where inventory tends to cluster."
-            ),
+            "explanation": _pt.expl_strike_magnets(lit),
         },
         {
-            "name": "Implied Move (Straddle)",
+            "name": _pt.name_implied_move(lit),
             "value": implied_move_pct,
             "direction": "neutral",
-            "explanation": (
-                "ATM straddle mid / spot for the nearest expiration — a rough implied one-standard-deviation "
-                "range proxy."
-            ),
+            "explanation": _pt.expl_implied_move(lit),
         },
     ]
 
@@ -755,6 +709,8 @@ def build_options_positioning_dict(
         "structure": structure_sigs,
     }
 
+    scen_bull, scen_bear, scen_range = _pt.scenario_narratives(symbol, lit)
+
     return {
         "symbol": symbol,
         "window": window,
@@ -764,7 +720,7 @@ def build_options_positioning_dict(
         "bearish_probability": round(bearish_probability, 4),
         "neutral_probability": round(neutral_probability, 4),
         "key_levels": around_spot,
-        "analyst_summary": _build_analyst_summary(symbol, bias, confidence, window),
+        "analyst_summary": _pt.analyst_summary(symbol, bias, confidence, window, lit),
         "signals": signals,
         "signal_categories": signal_categories,
         "regime": regime,
@@ -778,21 +734,17 @@ def build_options_positioning_dict(
             {
                 "label": "Bullish continuation",
                 "probability": round(bullish_probability, 4),
-                "narrative": (
-                    f"Upside continuation if {symbol} holds above " f"option-supported levels."
-                ),
+                "narrative": scen_bull,
             },
             {
                 "label": "Bearish unwind",
                 "probability": round(bearish_probability, 4),
-                "narrative": (
-                    f"Downside pressure if hedging demand rises and calls unwind " f"in {symbol}."
-                ),
+                "narrative": scen_bear,
             },
             {
                 "label": "Range-bound",
                 "probability": round(neutral_probability, 4),
-                "narrative": "Mean-reverting regime likely if neither side gains flow dominance.",
+                "narrative": scen_range,
             },
         ],
     }
@@ -802,6 +754,7 @@ async def compute_options_positioning_context(
     provider: MarketDataProvider,
     symbol: str,
     window: Literal["near", "mid"] = "near",
+    financial_literacy: FinancialLiteracy | str | None = None,
 ) -> OptionsPositioningResult:
     """Fetch quote + full chain and compute aggregate options-intelligence metrics."""
     sym = symbol.strip().upper()
@@ -809,5 +762,7 @@ async def compute_options_positioning_context(
     chain = await provider.get_options_chain(underlying_symbol=sym, expiration_date=None)
     calls = list(chain.calls or [])
     puts = list(chain.puts or [])
-    raw = build_options_positioning_dict(chain, calls, puts, quote, sym, window)
+    raw = build_options_positioning_dict(
+        chain, calls, puts, quote, sym, window, financial_literacy=financial_literacy
+    )
     return OptionsPositioningResult.model_validate(raw)

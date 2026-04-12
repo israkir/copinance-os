@@ -1,4 +1,4 @@
-"""Data layer: providers, cache, repositories, loaders, schemas, and derived analytics."""
+"""Data layer: providers, cache, repositories, loaders, schemas, analytics, and literacy narratives."""
 
 from copinance_os.data.schemas import (
     PriceSeries,

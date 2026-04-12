@@ -20,6 +20,7 @@ from copinance_os.core.pipeline.tools.context_tools import GetCurrentDateTool
 from copinance_os.core.pipeline.tools.discovery import collect_question_driven_tools
 from copinance_os.core.progress.emit import maybe_emit_progress
 from copinance_os.core.progress.recording_sink import RecordingProgressSink
+from copinance_os.domain.literacy import financial_literacy_prompt_value
 from copinance_os.domain.models.agent_progress import (
     GatheringContextEvent,
     LlmStreamProgressEvent,
@@ -285,8 +286,7 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
             tools, symbol, current_date=current_date
         )
 
-        # Get financial literacy level
-        financial_literacy = context.get("financial_literacy", "intermediate")
+        financial_literacy = financial_literacy_prompt_value(context.get("financial_literacy"))
 
         # Load prompts: use cache when available, otherwise render and cache
         cache_kw = {

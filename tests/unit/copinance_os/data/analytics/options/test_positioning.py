@@ -12,6 +12,7 @@ import pytest
 from copinance_os.data.analytics.options.positioning import build_options_positioning_dict
 from copinance_os.domain.models.market import OptionContract, OptionGreeks, OptionsChain, OptionSide
 from copinance_os.domain.models.options_positioning import OptionsPositioningResult
+from copinance_os.domain.models.profile import FinancialLiteracy
 
 
 def _gc(strike: float, oi: int, vol: int, iv: float, delta: float, gamma: float) -> OptionContract:
@@ -95,6 +96,19 @@ def test_build_options_positioning_dict_validates(toy_chain: tuple) -> None:
     assert len(model.signal_categories.positioning) == 4
     assert model.iv_metrics is not None
     assert model.regime in ("positive_gamma", "negative_gamma", "neutral")
+
+
+@pytest.mark.unit
+def test_financial_literacy_beginner_changes_analyst_summary(toy_chain: tuple) -> None:
+    chain, calls, puts = toy_chain
+    quote = {"current_price": 595.0}
+    raw_default = build_options_positioning_dict(chain, calls, puts, quote, "SPY", "near")
+    raw_beginner = build_options_positioning_dict(
+        chain, calls, puts, quote, "SPY", "near", financial_literacy=FinancialLiteracy.BEGINNER
+    )
+    assert raw_beginner["analyst_summary"] != raw_default["analyst_summary"]
+    assert "aggregate options surface" in raw_default["analyst_summary"]
+    assert "more option contracts" in raw_beginner["analyst_summary"]
 
 
 @pytest.mark.unit

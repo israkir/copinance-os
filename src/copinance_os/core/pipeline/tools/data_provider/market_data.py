@@ -9,6 +9,7 @@ import structlog
 from copinance_os.core.pipeline.tools.data_provider.base import BaseDataProviderTool
 from copinance_os.data.analytics.options.positioning import build_options_positioning_dict
 from copinance_os.data.cache import CacheManager
+from copinance_os.domain.literacy import resolve_financial_literacy
 from copinance_os.domain.models.analysis import merge_instrument_expiration_inputs
 from copinance_os.domain.models.market import OptionSide
 from copinance_os.domain.models.options_positioning import OptionsPositioningResult
@@ -429,6 +430,13 @@ class MarketDataOptionsPositioningTool(BaseDataProviderTool[MarketDataProvider])
                         "enum": ["near", "mid"],
                         "default": "near",
                     },
+                    "financial_literacy": {
+                        "type": "string",
+                        "description": (
+                            "Audience tier for explanations: beginner, intermediate, or advanced"
+                        ),
+                        "enum": ["beginner", "intermediate", "advanced"],
+                    },
                 },
                 "required": ["symbol"],
             },
@@ -447,6 +455,7 @@ class MarketDataOptionsPositioningTool(BaseDataProviderTool[MarketDataProvider])
             symbol = str(validated["symbol"]).strip().upper()
             window_raw = validated.get("window", "near")
             window: Literal["near", "mid"] = "mid" if str(window_raw).lower() == "mid" else "near"
+            lit = resolve_financial_literacy(validated.get("financial_literacy"))
             quote = await self._provider.get_quote(symbol) or {}
             chain = await self._provider.get_options_chain(
                 underlying_symbol=symbol,
@@ -459,11 +468,12 @@ class MarketDataOptionsPositioningTool(BaseDataProviderTool[MarketDataProvider])
                 quote,
                 symbol,
                 window,
+                financial_literacy=lit,
             )
             model = OptionsPositioningResult.model_validate(raw)
             return self._create_success_result(
                 data=model.model_dump(mode="json"),
-                metadata={"symbol": symbol, "window": window},
+                metadata={"symbol": symbol, "window": window, "financial_literacy": lit.value},
             )
         except Exception as e:
             logger.error(
