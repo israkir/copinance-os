@@ -146,7 +146,7 @@ class TestYFinanceMarketProvider:
 
     @pytest.mark.asyncio
     async def test_get_quote_with_history(self) -> None:
-        """Test getting a quote with history data."""
+        """Test getting a quote with history data (session volume = sum of intraday bars)."""
         mock_ticker = MagicMock()
         mock_ticker.info = {
             "currentPrice": 150.0,
@@ -158,6 +158,18 @@ class TestYFinanceMarketProvider:
         }
         mock_hist = MagicMock()
         mock_hist.empty = False
+
+        class _FakeVolumeSeries:
+            def fillna(self, _zero: float) -> "_FakeVolumeSeries":
+                return self
+
+            def sum(self) -> int:
+                return 2_000_000
+
+        mock_hist.__getitem__ = MagicMock(
+            side_effect=lambda key: _FakeVolumeSeries() if key == "Volume" else MagicMock()
+        )
+
         mock_row = MagicMock()
         mock_row.__getitem__.return_value = 152.0
         mock_hist.iloc = MagicMock()
