@@ -126,11 +126,14 @@ def test__build_pos_dict_validates(toy_chain: tuple) -> None:
     assert model.symbol == "SPY"
     assert model.window == "near"
     assert model.methodology.version == "analysis_methodology_v1"
-    assert any(s.id.startswith("options.positioning") for s in model.methodology.specs)
-    assert model.methodology.specs
+    top_level_spec_ids = {s.id for s in model.methodology.specs}
+    assert top_level_spec_ids
+    assert "options.positioning.bias" in top_level_spec_ids
+    assert "options.positioning.data_quality" in top_level_spec_ids
+    assert "options.positioning.flow" not in top_level_spec_ids
     assert model.market_bias in ("bullish", "bearish", "neutral")
     assert model.signal_categories is not None
-    assert len(model.signal_categories.positioning) == 6
+    assert len(model.signal_categories.positioning.signals) == 6
     assert model.iv_metrics is not None
     assert model.regime in ("positive_gamma", "negative_gamma", "neutral")
     assert model.data_quality is not None and model.data_quality > 0.8

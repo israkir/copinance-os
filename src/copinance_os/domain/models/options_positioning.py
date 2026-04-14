@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field
 
 from copinance_os.domain.models.base import ValueObject
-from copinance_os.domain.models.methodology import AnalysisMethodology
+from copinance_os.domain.models.methodology import AnalysisMethodology, MethodologySpec
 
 PositioningWindow = Literal["near", "mid"]
 PositioningBias = Literal["bullish", "bearish", "neutral"]
@@ -57,6 +57,7 @@ class IVMetricsModel(ValueObject):
     skew_10_delta: float | None = Field(default=None, alias="skew10Delta")
     butterfly_25_delta: float | None = Field(default=None, alias="butterfly25Delta")
     skew_regime: SkewRegime | None = Field(default=None, alias="skewRegime")
+    methodology: tuple[MethodologySpec, ...] = Field(default_factory=tuple)
 
 
 class StrikeOIClusterModel(ValueObject):
@@ -91,6 +92,7 @@ class DeltaExposureModel(ValueObject):
     dollar_delta: float = Field(..., alias="dollarDelta")
     call_delta_exposure: float = Field(..., alias="callDeltaExposure")
     put_delta_exposure: float = Field(..., alias="putDeltaExposure")
+    methodology: MethodologySpec | None = None
 
 
 class EnhancedStrikeOIClusterModel(ValueObject):
@@ -112,6 +114,7 @@ class ImpliedMoveDetailModel(ValueObject):
     annualized_iv: float = Field(..., alias="annualizedIV")
     daily_implied_move_pct: float = Field(..., alias="dailyImpliedMovePct")
     period_implied_move_pct: float = Field(..., alias="periodImpliedMovePct")
+    methodology: MethodologySpec | None = None
 
 
 class VannaStrikeModel(ValueObject):
@@ -129,6 +132,7 @@ class VannaExposureModel(ValueObject):
     put_vanna_exposure: float = Field(..., alias="putVannaExposure")
     vanna_flip_strike: float | None = Field(default=None, alias="vannaFlipStrike")
     regime: VannaRegime = Field(default="neutral")
+    methodology: MethodologySpec | None = None
 
 
 class CharmExposureModel(ValueObject):
@@ -138,6 +142,7 @@ class CharmExposureModel(ValueObject):
     call_charm_exposure: float = Field(..., alias="callCharmExposure")
     put_charm_exposure: float = Field(..., alias="putCharmExposure")
     overnight_delta_drift: OvernightDeltaDrift = Field(default="neutral")
+    methodology: MethodologySpec | None = None
 
 
 class MispricingModel(ValueObject):
@@ -148,6 +153,7 @@ class MispricingModel(ValueObject):
     overpriced_call_pct: float = Field(..., alias="overpricedCallPct")
     overpriced_put_pct: float = Field(..., alias="overpricedPutPct")
     sentiment: MispricingSentiment = Field(default="neutral")
+    methodology: MethodologySpec | None = None
 
 
 class MoneynessBucket(ValueObject):
@@ -168,6 +174,7 @@ class MoneynessSummaryModel(ValueObject):
     buckets: list[MoneynessBucket] = Field(default_factory=list)
     dominant_call_bucket: str | None = Field(default=None, alias="dominantCallBucket")
     dominant_put_bucket: str | None = Field(default=None, alias="dominantPutBucket")
+    methodology: MethodologySpec | None = None
 
 
 class PinRiskStrikeModel(ValueObject):
@@ -186,16 +193,22 @@ class PinRiskModel(ValueObject):
     pin_risk_level: PinRiskLevel = Field(default="low")
     dte: int | None = None
     top_strikes: list[PinRiskStrikeModel] = Field(default_factory=list, alias="topStrikes")
+    methodology: MethodologySpec | None = None
 
 
 class SignalCategoriesModel(ValueObject):
     model_config = ConfigDict(populate_by_name=True)
 
-    positioning: list[PositioningMetricModel] = Field(default_factory=list)
-    volatility: list[PositioningMetricModel] = Field(default_factory=list)
-    flow: list[PositioningMetricModel] = Field(default_factory=list)
-    gamma: list[PositioningMetricModel] = Field(default_factory=list)
-    structure: list[PositioningMetricModel] = Field(default_factory=list)
+    positioning: SignalCategoryModel = Field(default_factory=lambda: SignalCategoryModel())
+    volatility: SignalCategoryModel = Field(default_factory=lambda: SignalCategoryModel())
+    flow: SignalCategoryModel = Field(default_factory=lambda: SignalCategoryModel())
+    gamma: SignalCategoryModel = Field(default_factory=lambda: SignalCategoryModel())
+    structure: SignalCategoryModel = Field(default_factory=lambda: SignalCategoryModel())
+
+
+class SignalCategoryModel(ValueObject):
+    signals: list[PositioningMetricModel] = Field(default_factory=list)
+    methodology: tuple[MethodologySpec, ...] = Field(default_factory=tuple)
 
 
 class OptionsPositioningResult(ValueObject):

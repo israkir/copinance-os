@@ -1,4 +1,4 @@
-"""Positioning methodology envelope assembly (merges chain Greek specs when present)."""
+"""Positioning methodology envelope assembly for component-distributed outputs."""
 
 from __future__ import annotations
 
@@ -11,13 +11,18 @@ from copinance_os.domain.models.methodology import (
 )
 
 
-def merge_positioning_methodology_specs(
-    positioning_specs: tuple[MethodologySpec, ...],
+def build_cross_cutting_positioning_specs(
+    *,
+    component_specs: dict[str, MethodologySpec],
     greeks_specs: tuple[MethodologySpec, ...] | None,
 ) -> tuple[MethodologySpec, ...]:
+    base_specs = (
+        component_specs["data_quality"],
+        component_specs["bias"],
+    )
     if greeks_specs:
-        return (*greeks_specs, *positioning_specs)
-    return positioning_specs
+        return (*greeks_specs, *base_specs)
+    return base_specs
 
 
 def build_positioning_analysis_methodology(

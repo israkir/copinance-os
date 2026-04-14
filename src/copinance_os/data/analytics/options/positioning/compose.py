@@ -73,6 +73,7 @@ def compose_options_positioning_payload(
     second_exp = near_exps[1] if len(near_exps) > 1 else None
 
     mc = methodology
+    component_specs = methodology.component_specs()
     data_quality = compute_data_quality(calls, puts, underlying, mc.quality)
     dollar_metrics_dict = compute_dollar_metrics(calls, puts, mc.dollar)
     delta_exposure_dict = compute_delta_exposure(calls, puts, underlying, mc.delta)
@@ -235,11 +236,16 @@ def compose_options_positioning_payload(
         "skew_10_delta": surface_partial.get("skew_10_delta"),
         "butterfly_25_delta": surface_partial.get("butterfly_25_delta"),
         "skew_regime": surface_partial.get("skew_regime"),
+        "methodology": (
+            component_specs["volatility"],
+            component_specs["surface"],
+        ),
     }
 
     flow_sigs = compute_flow_signals(calls, puts, lit, mc.flow)
     if mispricing_bundle is not None:
         mp_row = mispricing_bundle["mispricing"]
+        mp_row["methodology"] = component_specs["mispricing"]
         mp_dir: Literal["bullish", "bearish", "neutral"] = (
             "bullish"
             if mp_row["sentiment"] == "call_demand"
@@ -259,6 +265,7 @@ def compose_options_positioning_payload(
             }
         )
     ms_row = moneyness_bundle["moneyness_summary"]
+    ms_row["methodology"] = component_specs["moneyness"]
     mom_dir = moneyness_flow_direction(
         ms_row.get("dominant_call_bucket"), ms_row.get("dominant_put_bucket")
     )
@@ -342,6 +349,8 @@ def compose_options_positioning_payload(
     implied_move_pct, _implied_move_abs, implied_move_detail = compute_implied_move(
         calls, puts, nearest_exp, underlying, ref_date, mc.implied_move
     )
+    if implied_move_detail is not None:
+        implied_move_detail["methodology"] = component_specs["implied_move"]
     oi_clusters = oi_clusters_by_strike(calls, puts, nearest_exp, top_n=mc.oi_clusters.top_n)
 
     max_pain_val = float(max_pain_strike) if max_pain_strike is not None else 0.0
@@ -368,6 +377,7 @@ def compose_options_positioning_payload(
     ]
 
     if pin_bundle is not None:
+        pin_bundle["methodology"] = component_specs["pin_risk"]
         pin_lvl = str(pin_bundle["pin_risk_level"])
         pin_val = 0.33 if pin_lvl == "low" else 0.66 if pin_lvl == "moderate" else 1.0
         structure_sigs.append(
@@ -379,17 +389,57 @@ def compose_options_positioning_payload(
             }
         )
 
+    positioning_signals: list[dict[str, Any]] = signals
+    volatility_signals: list[dict[str, Any]] = volatility_category
+    flow_signals: list[dict[str, Any]] = flow_sigs
+    gamma_signals: list[dict[str, Any]] = gamma_sigs
+    structure_signals: list[dict[str, Any]] = structure_sigs
+
     signal_categories = {
-        "positioning": signals,
-        "volatility": volatility_category,
-        "flow": flow_sigs,
-        "gamma": gamma_sigs,
-        "structure": structure_sigs,
+        "positioning": {
+            "signals": positioning_signals,
+            "methodology": (
+                component_specs["dollar_metrics"],
+                component_specs["delta_exposure"],
+            ),
+        },
+        "volatility": {
+            "signals": volatility_signals,
+            "methodology": (
+                component_specs["volatility"],
+                component_specs["surface"],
+            ),
+        },
+        "flow": {
+            "signals": flow_signals,
+            "methodology": (
+                component_specs["flow"],
+                component_specs["mispricing"],
+                component_specs["moneyness"],
+            ),
+        },
+        "gamma": {
+            "signals": gamma_signals,
+            "methodology": (
+                component_specs["gex"],
+                component_specs["delta_exposure"],
+                component_specs["vanna"],
+                component_specs["charm"],
+            ),
+        },
+        "structure": {
+            "signals": structure_signals,
+            "methodology": (
+                component_specs["oi_clusters"],
+                component_specs["implied_move"],
+                component_specs["pin_risk"],
+            ),
+        },
     }
     signal_agreement = compute_signal_agreement(
-        signal_categories["positioning"],
-        signal_categories["flow"],
-        signal_categories["gamma"],
+        positioning_signals,
+        flow_signals,
+        gamma_signals,
     )
 
     cw = oi_enhanced_bundle["call_wall"]
@@ -420,6 +470,7 @@ def compose_options_positioning_payload(
             "dollar_call_volume": round(dollar_metrics_dict["dollar_call_volume"], 4),
             "dollar_put_volume": round(dollar_metrics_dict["dollar_put_volume"], 4),
             "dollar_call_flow_share": round(dollar_metrics_dict["dollar_call_flow_share"], 4),
+            "methodology": component_specs["dollar_metrics"],
         },
         "gamma_flip_strike": gf_strike,
         "gex_profile": gex_bundle["gex_profile"],
@@ -430,14 +481,23 @@ def compose_options_positioning_payload(
             "dollar_delta": round(delta_exposure_dict["dollar_delta"], 4),
             "call_delta_exposure": round(delta_exposure_dict["call_delta_exposure"], 4),
             "put_delta_exposure": round(delta_exposure_dict["put_delta_exposure"], 4),
+            "methodology": component_specs["delta_exposure"],
         },
         "oi_clusters_enhanced": oi_enhanced_bundle["clusters"],
         "call_wall": float(cw) if cw is not None else None,
         "put_wall": float(pw) if pw is not None else None,
         "signal_agreement": signal_agreement,
-        "vanna_exposure": vanna_bundle.get("vanna_exposure"),
+        "vanna_exposure": (
+            {**vanna_bundle["vanna_exposure"], "methodology": component_specs["vanna"]}
+            if vanna_bundle.get("vanna_exposure") is not None
+            else None
+        ),
         "vanna_profile": vanna_bundle.get("vanna_profile", []),
-        "charm_exposure": charm_bundle.get("charm_exposure"),
+        "charm_exposure": (
+            {**charm_bundle["charm_exposure"], "methodology": component_specs["charm"]}
+            if charm_bundle.get("charm_exposure") is not None
+            else None
+        ),
         "mispricing": mispricing_bundle.get("mispricing") if mispricing_bundle else None,
         "moneyness_summary": moneyness_bundle.get("moneyness_summary"),
         "pin_risk": pin_bundle,

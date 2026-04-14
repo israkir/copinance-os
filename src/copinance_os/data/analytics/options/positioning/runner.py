@@ -20,8 +20,8 @@ from copinance_os.data.analytics.options.positioning.contracts import (
     sorted_expirations,
 )
 from copinance_os.data.analytics.options.positioning.methodology import (
+    build_cross_cutting_positioning_specs,
     build_positioning_analysis_methodology,
-    merge_positioning_methodology_specs,
 )
 from copinance_os.domain.literacy import resolve_financial_literacy
 from copinance_os.domain.models.market import OptionContract, OptionsChain
@@ -78,7 +78,11 @@ def build_options_positioning(
 
     dq = float(payload["data_quality"] or 0.0)
     greek_specs = chain_work.greeks_methodology.specs if chain_work.greeks_methodology else None
-    merged_specs = merge_positioning_methodology_specs(methodology.specs(), greek_specs)
+    component_specs = methodology.component_specs()
+    merged_specs = build_cross_cutting_positioning_specs(
+        component_specs=component_specs,
+        greeks_specs=greek_specs,
+    )
     envelope = build_positioning_analysis_methodology(
         specs=merged_specs,
         symbol=symbol,

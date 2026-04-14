@@ -108,7 +108,9 @@ class TestOptionsPositioningSnapshotIntegration:
         assert model.regime in ("positive_gamma", "negative_gamma", "neutral")
         spec_ids = {s.id for s in model.methodology.specs}
         assert "options.positioning.bias" in spec_ids
+        assert "options.positioning.data_quality" in spec_ids
         assert "options.greeks.quantlib_bsm_european" in spec_ids
+        assert "options.positioning.flow" not in spec_ids
 
     def test_enriched_greeks_self_consistent_with_recompute(self) -> None:
         chain, as_of = _load_snapshot_chain()

@@ -138,5 +138,24 @@ class PositioningMethodology:
             bias_methodology(self.bias),
         )
 
+    def component_specs(self) -> dict[str, MethodologySpec]:
+        return {
+            "data_quality": data_quality_methodology(self.quality),
+            "dollar_metrics": dollar_methodology(self.dollar),
+            "delta_exposure": delta_methodology(self.delta),
+            "gex": gex_methodology(self.gex),
+            "vanna": vanna_methodology(self.vanna),
+            "charm": charm_methodology(self.charm),
+            "mispricing": mispricing_methodology(self.mispricing),
+            "moneyness": moneyness_methodology(self.moneyness),
+            "pin_risk": pin_risk_methodology(self.pin_risk),
+            "volatility": volatility_methodology(self.volatility),
+            "surface": surface_methodology(self.surface),
+            "flow": flow_methodology(self.flow),
+            "implied_move": implied_move_methodology(self.implied_move),
+            "oi_clusters": oi_clusters_methodology(self.oi_clusters),
+            "bias": bias_methodology(self.bias),
+        }
+
 
 DEFAULT_POSITIONING_METHODOLOGY = PositioningMethodology()
