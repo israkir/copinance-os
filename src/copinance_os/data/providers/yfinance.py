@@ -205,6 +205,16 @@ class YFinanceMarketProvider(MarketDataProvider):
             # Get latest price data
             hist = await asyncio.to_thread(lambda: ticker.history(period="1d", interval="1m"))
 
+            info_volume = (
+                _safe_int(
+                    info.get("regularMarketVolume")
+                    or info.get("volume")
+                    or info.get("averageVolume")
+                    or info.get("averageDailyVolume3Month")
+                )
+                or 0
+            )
+
             quote = {
                 "symbol": symbol.upper(),
                 "longName": info.get("longName"),
@@ -216,7 +226,7 @@ class YFinanceMarketProvider(MarketDataProvider):
                 "open": Decimal(str(info.get("open", 0))),
                 "high": Decimal(str(info.get("dayHigh", info.get("regularMarketDayHigh", 0)))),
                 "low": Decimal(str(info.get("dayLow", info.get("regularMarketDayLow", 0)))),
-                "volume": int(info.get("volume", info.get("regularMarketVolume", 0))),
+                "volume": info_volume,
                 "market_cap": int(info.get("marketCap", 0)) if info.get("marketCap") else None,
                 "currency": info.get("currency", "USD"),
                 "exchange": info.get("exchange", ""),
@@ -227,7 +237,16 @@ class YFinanceMarketProvider(MarketDataProvider):
             if not hist.empty:
                 latest = hist.iloc[-1]
                 quote["current_price"] = Decimal(str(float(latest["Close"])))
-                quote["volume"] = int(latest["Volume"])
+                # `latest["Volume"]` is per-bar volume, often 0 for the latest minute.
+                # Header UX expects session volume, so prefer whole-session sum when available.
+                try:
+                    session_volume = int(hist["Volume"].fillna(0).sum())
+                except Exception:
+                    session_volume = 0
+                if session_volume > 0:
+                    quote["volume"] = session_volume
+                elif int(latest["Volume"]) > 0:
+                    quote["volume"] = int(latest["Volume"])
 
             logger.info("Fetched quote", symbol=symbol, provider=self._provider_name)
             return quote
