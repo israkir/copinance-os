@@ -12,12 +12,12 @@ from copinance_os.domain.models.options_positioning import SignalAgreement
 
 REF_BOLLEN_WHALEY_2004 = MethodologyReference(
     id="REF_BOLLEN_WHALEY_2004",
-    title="Bollen and Whaley (2004), Does Net Buying Pressure Affect the Shape of Implied Volatility Functions?",
+    title="Bollen, N. P. B., & Whaley, R. E. (2004), Does net buying pressure affect the shape of implied volatility functions?, Journal of Finance, 59(2), 711-753",
     url="https://doi.org/10.1111/j.1540-6261.2004.00663.x",
 )
 REF_PAN_POTESHMAN_2006 = MethodologyReference(
     id="REF_PAN_POTESHMAN_2006",
-    title="Pan and Poteshman (2006), The Information in Option Volume for Future Stock Prices",
+    title="Pan, J., & Poteshman, A. M. (2006), The information in option volume for future stock prices, Review of Financial Studies, 19(3), 871-908",
     url="https://doi.org/10.1093/rfs/hhj021",
 )
 

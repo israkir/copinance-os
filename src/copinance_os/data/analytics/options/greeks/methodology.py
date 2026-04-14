@@ -14,23 +14,23 @@ from copinance_os.domain.models.methodology import (
 
 _REF_QUANTLIB = MethodologyReference(
     id="REF_QUANTLIB_ANALYTIC_EUROPEAN",
-    title="QuantLib AnalyticEuropeanEngine",
-    url="https://www.quantlib.org/",
+    title="QuantLib Development Group (2021), AnalyticEuropeanEngine (ql/pricingengines/vanilla/analyticeuropeanengine.hpp)",
+    url="https://github.com/lballabio/QuantLib/blob/master/ql/pricingengines/vanilla/analyticeuropeanengine.hpp",
 )
 _REF_BERGOMI = MethodologyReference(
     id="REF_BERGOMI_2005",
-    title="Lorenzo Bergomi (2005), Smile Dynamics IV",
+    title="Bergomi, L. (2005), Smile dynamics IV (Risk.net technical paper)",
     url="https://www.risk.net/derivatives/equity-derivatives/1510166/smile-dynamics",
 )
 _REF_TALEB = MethodologyReference(
     id="REF_TALEB_1997",
-    title="Nassim Nicholas Taleb (1997), Dynamic Hedging",
-    url="https://onlinelibrary.wiley.com/doi/book/10.1002/9781119198665",
+    title="Taleb, N. N. (1997), Dynamic hedging: Managing vanilla and exotic options (John Wiley & Sons; ISBN 978-0-471-15280-4)",
+    url="https://www.wiley.com/en-us/Dynamic+Hedging%3A+Managing+Vanilla+and+Exotic+Options-p-9780471152804",
 )
 _REF_CARR_WU = MethodologyReference(
     id="REF_CARR_WU_2009",
-    title="Carr and Wu (2009), Variance Risk Premiums",
-    url="https://doi.org/10.1093/rfs/hhp063",
+    title="Carr, P., & Wu, L. (2009), Variance risk premiums, The Review of Financial Studies, 22(3), 1311-1341",
+    url="https://doi.org/10.1093/rfs/hhn038",
 )
 
 

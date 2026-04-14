@@ -69,10 +69,18 @@ The default expiration is the **earliest listed date on or after today**, avoidi
 
 ## Methodology contract
 
-`OptionsChain.metadata` remains provider-facing input metadata (for example, `provider` and optional `dividend_yield`). Methodology output is now explicit and structured:
+`OptionsChain.metadata` remains provider-facing input metadata (for example, `provider` and optional `dividend_yield`). Methodology output is explicit and structured:
 
 - `OptionsChain.greeks_methodology: AnalysisMethodology | None`
 - `OptionsPositioningResult.methodology: AnalysisMethodology`
+
+For **options positioning**, methodology is now **component-distributed** (no backward-compatible flat spec bundle):
+
+- `OptionsPositioningResult.methodology.specs` includes only cross-cutting specs (Greeks engine when enrichment is enabled, plus aggregate `bias` and `data_quality`).
+- `OptionsPositioningResult.signal_categories.<category>.methodology` contains the specs that generated that category's signals.
+- Standalone component sections (for example `iv_metrics`, `dollar_metrics`, `delta_exposure`, `vanna_exposure`, `charm_exposure`, `mispricing`, `moneyness_summary`, `pin_risk`, `implied_move_detail`) include their own `methodology` field.
+
+This contract intentionally avoids legacy compatibility wrappers or fallback response shapes. If a metric cannot be computed, it is returned as unavailable (`null`) rather than synthesized from fallback logic.
 
 ### Provider inputs (optional)
 
