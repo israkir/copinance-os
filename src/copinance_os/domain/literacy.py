@@ -13,9 +13,9 @@
    and ``.pick(lit)`` so all three tiers stay in sync across instrument, market, macro,
    and options analysis surfaces.
 
-3. **LLM prompts** — Question-driven and similar flows pass a single string into templates (e.g.
-   ``{financial_literacy}``). Use :func:`financial_literacy_prompt_value` so defaults and invalid
-   tokens match deterministic analytics (intermediate default).
+3. **LLM prompts** — Question-driven flows pass ``{financial_literacy}`` and a tier-specific
+   ``{literacy_output_contract}`` (see :func:`literacy_output_contract_for_question_driven`).
+   Use :func:`financial_literacy_prompt_value` for the stable token string.
 
 **Layering**
 
@@ -71,3 +71,27 @@ def resolve_financial_literacy(value: FinancialLiteracy | str | None) -> Financi
 def financial_literacy_prompt_value(value: FinancialLiteracy | str | None) -> str:
     """Return the stable string token for LLM system/user templates (e.g. ``{financial_literacy}``)."""
     return resolve_financial_literacy(value).value
+
+
+def literacy_output_contract_for_question_driven(lit: FinancialLiteracy) -> str:
+    """Hard output rules for question-driven prompts (injected as ``{literacy_output_contract}``)."""
+    if lit == FinancialLiteracy.BEGINNER:
+        return (
+            "MANDATORY FOR THIS USER (beginner):\n"
+            "- Lead the final answer with one plain-English sentence on what matters for them (no jargon).\n"
+            "- Define every finance term the first time you use it (same sentence: term → plain meaning).\n"
+            "- Prefer short sentences; use one analogy or everyday comparison when explaining a mechanism.\n"
+            "- Prioritize 'what could go wrong / what to watch' over listing indicators; avoid acronym stacks.\n"
+            "- Do not perform 'expert voice': if a simpler phrase exists, use it."
+        )
+    if lit == FinancialLiteracy.ADVANCED:
+        return (
+            "MANDATORY FOR THIS USER (advanced):\n"
+            "- Use full institutional vocabulary and compact reasoning; skip tutorial definitions.\n"
+            "- You may chain second-order effects, cross-asset context, and options-structure detail directly."
+        )
+    return (
+        "MANDATORY FOR THIS USER (intermediate):\n"
+        "- Use standard market terms; one short gloss when introducing a less common concept.\n"
+        "- Mix intuition (price path, risk) with light structure (short bullets allowed)."
+    )

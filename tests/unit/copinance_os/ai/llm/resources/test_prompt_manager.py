@@ -352,6 +352,25 @@ class TestPromptManager:
         assert "get_quote, get_fundamentals" in user
         assert "get_quote(symbol=AAPL)" in user
 
+    def test_package_question_driven_prompt_embeds_financial_literacy_beginner(self) -> None:
+        """Shipped analyze_question_driven must substitute {financial_literacy} (BFF/chat regression guard)."""
+        manager = PromptManager()
+        system, user = manager.get_prompt(
+            ANALYZE_QUESTION_DRIVEN_PROMPT_NAME,
+            question="What are the main risks for LLY options?",
+            tools_description="get_quote, get_options_positioning",
+            tool_examples='{"tool":"get_quote","args":{"symbol":"LLY"}}',
+            financial_literacy="beginner",
+            current_date="2026-04-17",
+        )
+        assert "LITERACY-FIRST" in system
+        assert "user level: beginner" in system
+        assert "MANDATORY FOR THIS USER (beginner)" in system
+        assert "{financial_literacy}" not in system
+        assert "{literacy_output_contract}" not in system
+        assert "What are the main risks for LLY options?" in user
+        assert "2026-04-17" in user
+
     def test_custom_template_substitution_all_variables(self) -> None:
         """All placeholders in a custom template are substituted."""
         custom_templates = {

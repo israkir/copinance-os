@@ -14,7 +14,26 @@ from typing import Any, cast
 
 import structlog
 
+from copinance_os.domain.literacy import (
+    literacy_output_contract_for_question_driven,
+    resolve_financial_literacy,
+)
+
 logger = structlog.get_logger(__name__)
+
+
+def _merge_default_prompt_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Apply defaults used across prompt templates (date, tier output contract)."""
+    out = dict(kwargs)
+    out.setdefault("current_date", datetime.now(UTC).strftime("%Y-%m-%d"))
+    out.setdefault(
+        "literacy_output_contract",
+        literacy_output_contract_for_question_driven(
+            resolve_financial_literacy(out.get("financial_literacy"))
+        ),
+    )
+    return out
+
 
 # Package reference for loading default prompts
 _PACKAGE = "copinance_os.ai.llm.resources"
@@ -182,9 +201,7 @@ class PromptManager:
             ... )
         """
         prompt_data = self._load_prompt_file(prompt_name)
-        # Provide default for common template variables when not passed
-        kwargs = dict(kwargs)
-        kwargs.setdefault("current_date", datetime.now(UTC).strftime("%Y-%m-%d"))
+        kwargs = _merge_default_prompt_kwargs(kwargs)
         system_prompt = prompt_data["system_prompt"].format(**kwargs)
         user_prompt = prompt_data["user_prompt"].format(**kwargs)
         return system_prompt, user_prompt
@@ -192,13 +209,11 @@ class PromptManager:
     def get_system_prompt(self, prompt_name: str, **kwargs: Any) -> str:
         """Return only the system prompt with variables substituted."""
         prompt_data = self._load_prompt_file(prompt_name)
-        kwargs = dict(kwargs)
-        kwargs.setdefault("current_date", datetime.now(UTC).strftime("%Y-%m-%d"))
+        kwargs = _merge_default_prompt_kwargs(kwargs)
         return prompt_data["system_prompt"].format(**kwargs)
 
     def get_user_prompt(self, prompt_name: str, **kwargs: Any) -> str:
         """Return only the user prompt with variables substituted."""
         prompt_data = self._load_prompt_file(prompt_name)
-        kwargs = dict(kwargs)
-        kwargs.setdefault("current_date", datetime.now(UTC).strftime("%Y-%m-%d"))
+        kwargs = _merge_default_prompt_kwargs(kwargs)
         return prompt_data["user_prompt"].format(**kwargs)
