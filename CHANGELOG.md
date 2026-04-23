@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **FRED provider**: **`FredMacroeconomicProvider.get_release_dates`** resolves the parent release for a **FRED** series (`/series/release`), loads **`/release/dates`** with **`limit`** and **`sort_order`**, and returns **UTC** **`datetime`** values; handles **`releases`** or singular **`release`** payloads. Unit tests cover the two-step flow, empty release metadata, and missing API key.
 - **Library — `financial_literacy` on analyze requests & stable imports**: Optional **`financial_literacy`** on **`AnalyzeInstrumentRequest`** / **`AnalyzeMarketRequest`** overrides the attached profile tier; **`copinance_os`** re-exports **`AnalyzeInstrumentRequest`**, **`AnalyzeMarketRequest`**, **`AnalyzeMode`**, **`RunJobResult`**, **`AnalysisReport`**, **`AnalysisProfile`**, and **`FinancialLiteracy`** for a single import path. Developer guide **`financial-literacy.mdx`** (nav **Financial literacy (clients)**); **Using as a Library** documents request-level literacy, precedence, and the intermediate default.
 - **CLI — async commands**: Transient Rich **dots** spinner on **stderr** while **`async_command`** runs in an interactive terminal; suppressed for **`--json`** (machine-readable stdout) and non-TTY environments.
 - **Transparency contract — options positioning + Greeks methodology (breaking)**: Methodology is now standardized through shared **`AnalysisMethodology`** / **`MethodologySpec`** value objects. `OptionsPositioningResult`, `AnalysisReport`, market-regime outputs, and backtest outputs all use the same structured envelope.
@@ -86,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **FRED provider typing guard**: Added an explicit terminal `RuntimeError` in `FredMacroeconomicProvider._get_with_retry` to satisfy strict mypy return-path analysis after retry-loop hardening.
+- **FRED release dates resilience**: `FredMacroeconomicProvider.get_release_dates` now retries transient transport failures plus HTTP `429`/`5xx` responses with bounded backoff+jitter before surfacing errors; added focused unit tests for retry-success and retry-exhaustion paths.
 - **Docs — library literacy example**: Replaced smart quotes in the **Using as a Library** Python snippet with ASCII string literals so the sample is valid Python.
 - **yfinance quotes**: Intraday quote `volume` prefers a whole-session sum from 1m history when available (latest bar volume is often zero); `info` volume fields use safe integer coercion with fallbacks (`regularMarketVolume`, `volume`, `averageVolume`, `averageDailyVolume3Month`).
 - **Options positioning tests**: Regenerated `tests/fixtures/options_positioning/toy_near.json` to match updated methodology reference metadata and keep golden-fixture regression assertions in sync.
