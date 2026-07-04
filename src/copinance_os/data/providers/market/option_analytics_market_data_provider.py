@@ -5,6 +5,7 @@ This module wires a source provider to domain analytics (``OptionsChainGreeksEst
 without embedding QuantLib or other engines inside vendor implementations.
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -51,8 +52,13 @@ class OptionAnalyticsMarketDataProvider(MarketDataProvider):
     ) -> list[MarketDataPoint]:
         return await self._inner.get_intraday_data(symbol, interval=interval)
 
-    async def search_instruments(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        return await self._inner.search_instruments(query, limit=limit)
+    async def search_instruments(
+        self,
+        query: str,
+        limit: int = 10,
+        quote_types: Sequence[str] | None = ("EQUITY", "ETF", ""),
+    ) -> list[dict[str, Any]]:
+        return await self._inner.search_instruments(query, limit=limit, quote_types=quote_types)
 
     async def get_options_chain(
         self,

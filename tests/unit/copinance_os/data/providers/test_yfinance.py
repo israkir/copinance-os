@@ -189,6 +189,81 @@ class TestYFinanceMarketProvider:
             assert quote["volume"] == 2000000
 
     @pytest.mark.asyncio
+    async def test_get_quote_includes_beta(self) -> None:
+        """Test that get_quote includes beta from ticker.info."""
+        mock_ticker = MagicMock()
+        mock_ticker.info = {
+            "currentPrice": 150.0,
+            "previousClose": 149.0,
+            "open": 150.5,
+            "dayHigh": 151.0,
+            "dayLow": 149.5,
+            "volume": 1000000,
+            "beta": 1.22,
+        }
+        mock_hist = MagicMock()
+        mock_hist.empty = True
+
+        with patch(
+            "asyncio.to_thread",
+            new=AsyncMock(side_effect=[mock_ticker, mock_ticker.info, mock_hist]),
+        ):
+            provider = YFinanceMarketProvider()
+            quote = await provider.get_quote("AAPL")
+
+            assert quote.get("beta") is None or isinstance(quote["beta"], Decimal)
+            assert quote["beta"] == Decimal("1.22")
+
+    @pytest.mark.asyncio
+    async def test_get_quote_beta_none_when_missing(self) -> None:
+        """Test that get_quote sets beta to None when not present in ticker.info."""
+        mock_ticker = MagicMock()
+        mock_ticker.info = {
+            "currentPrice": 150.0,
+            "previousClose": 149.0,
+            "open": 150.5,
+            "dayHigh": 151.0,
+            "dayLow": 149.5,
+            "volume": 1000000,
+        }
+        mock_hist = MagicMock()
+        mock_hist.empty = True
+
+        with patch(
+            "asyncio.to_thread",
+            new=AsyncMock(side_effect=[mock_ticker, mock_ticker.info, mock_hist]),
+        ):
+            provider = YFinanceMarketProvider()
+            quote = await provider.get_quote("AAPL")
+
+            assert quote.get("beta") is None
+
+    @pytest.mark.asyncio
+    async def test_get_quote_includes_quote_type(self) -> None:
+        """Test that get_quote passes through quoteType from ticker.info."""
+        mock_ticker = MagicMock()
+        mock_ticker.info = {
+            "currentPrice": 60000.0,
+            "previousClose": 59000.0,
+            "open": 59500.0,
+            "dayHigh": 60500.0,
+            "dayLow": 59000.0,
+            "volume": 1000000,
+            "quoteType": "CRYPTOCURRENCY",
+        }
+        mock_hist = MagicMock()
+        mock_hist.empty = True
+
+        with patch(
+            "asyncio.to_thread",
+            new=AsyncMock(side_effect=[mock_ticker, mock_ticker.info, mock_hist]),
+        ):
+            provider = YFinanceMarketProvider()
+            quote = await provider.get_quote("BTC-USD")
+
+            assert quote["quoteType"] == "CRYPTOCURRENCY"
+
+    @pytest.mark.asyncio
     async def test_get_quote_handles_exception(self) -> None:
         """Test get_quote handles exceptions."""
         with (
@@ -412,6 +487,60 @@ class TestYFinanceMarketProvider:
 
             assert result == []
             mock_logger.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_search_instruments_custom_quote_types_includes_crypto(self) -> None:
+        """Passing quote_types=("CRYPTOCURRENCY",) surfaces crypto, excludes equities."""
+        mock_search = MagicMock()
+        mock_search.quotes = [
+            {
+                "symbol": "BTC-USD",
+                "longname": "Bitcoin USD",
+                "exchange": "CCC",
+                "quoteType": "CRYPTOCURRENCY",
+            },
+            {
+                "symbol": "AAPL",
+                "longname": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "quoteType": "EQUITY",
+            },
+        ]
+
+        with (
+            patch("copinance_os.data.providers.yfinance.YFINANCE_AVAILABLE", True),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=mock_search)),
+        ):
+            provider = YFinanceMarketProvider()
+            result = await provider.search_instruments(
+                "bitcoin", limit=10, quote_types=("CRYPTOCURRENCY",)
+            )
+
+            assert len(result) == 1
+            assert result[0]["symbol"] == "BTC-USD"
+
+    @pytest.mark.asyncio
+    async def test_search_instruments_quote_types_none_disables_filter(self) -> None:
+        """quote_types=None returns every quoteType, including ones outside the default set."""
+        mock_search = MagicMock()
+        mock_search.quotes = [
+            {
+                "symbol": "BOND",
+                "longname": "Bond",
+                "exchange": "NYSE",
+                "quoteType": "BOND",
+            },
+        ]
+
+        with (
+            patch("copinance_os.data.providers.yfinance.YFINANCE_AVAILABLE", True),
+            patch("asyncio.to_thread", new=AsyncMock(return_value=mock_search)),
+        ):
+            provider = YFinanceMarketProvider()
+            result = await provider.search_instruments("bond", limit=10, quote_types=None)
+
+            assert len(result) == 1
+            assert result[0]["symbol"] == "BOND"
 
 
 @pytest.mark.unit
