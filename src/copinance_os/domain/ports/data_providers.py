@@ -1,6 +1,7 @@
 """Data ingestion and integration layer interfaces."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -52,15 +53,22 @@ class MarketDataProvider(DataProvider):
         pass
 
     @abstractmethod
-    async def search_instruments(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def search_instruments(
+        self,
+        query: str,
+        limit: int = 10,
+        quote_types: Sequence[str] | None = ("EQUITY", "ETF", ""),
+    ) -> list[dict[str, Any]]:
         """Search for market instruments by symbol or display name.
 
         Args:
             query: Search query (can be symbol or company name)
             limit: Maximum number of results to return
+            quote_types: Restrict results to these yfinance ``quoteType`` values
+                (e.g. ``"CRYPTOCURRENCY"``, ``"FUTURE"``). ``None`` disables filtering.
 
         Returns:
-            List of matching instruments with symbol, name, exchange, etc.
+            List of matching instruments with symbol, name, exchange, quoteType, etc.
         """
         pass
 

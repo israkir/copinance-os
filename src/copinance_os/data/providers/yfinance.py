@@ -24,6 +24,7 @@ To use a custom provider, simply implement the MarketDataProvider interface:
 """
 
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
@@ -231,6 +232,8 @@ class YFinanceMarketProvider(MarketDataProvider):
                 "currency": info.get("currency", "USD"),
                 "exchange": info.get("exchange", ""),
                 "timestamp": datetime.now(UTC).isoformat(),
+                "beta": Decimal(str(info["beta"])) if info.get("beta") is not None else None,
+                "quoteType": info.get("quoteType"),
             }
 
             # Add latest price from history if available
@@ -407,15 +410,23 @@ class YFinanceMarketProvider(MarketDataProvider):
             ) from e
 
     @override
-    async def search_instruments(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def search_instruments(
+        self,
+        query: str,
+        limit: int = 10,
+        quote_types: Sequence[str] | None = ("EQUITY", "ETF", ""),
+    ) -> list[dict[str, Any]]:
         """Search for market instruments by symbol or name using yfinance Search.
 
         Args:
             query: Search query (can be symbol or company name)
             limit: Maximum number of results to return
+            quote_types: Restrict results to these yfinance ``quoteType`` values.
+                ``None`` disables filtering (returns all quote types, including
+                unlabeled results from yfinance).
 
         Returns:
-            List of matching market instruments with symbol, name, exchange, etc.
+            List of matching market instruments with symbol, name, exchange, quoteType, etc.
         """
         try:
             if not YFINANCE_AVAILABLE:
@@ -432,6 +443,8 @@ class YFinanceMarketProvider(MarketDataProvider):
                 logger.debug("No search results found", query=query)
                 return []
 
+            allowed_types = set(quote_types) if quote_types is not None else None
+
             # Format results (yfinance Search returns dicts with lowercase keys:
             # symbol, longname, shortname, exchange, exchDisp, quoteType, etc.)
             results: list[dict[str, Any]] = []
@@ -443,8 +456,7 @@ class YFinanceMarketProvider(MarketDataProvider):
                     "exch_disp": quote.get("exchDisp", ""),
                     "quoteType": quote.get("quoteType", ""),
                 }
-                # Only include stock/equity results, filter out other types
-                if result["quoteType"] in ["EQUITY", "ETF", ""]:
+                if allowed_types is None or result["quoteType"] in allowed_types:
                     results.append(result)
 
             logger.info(
