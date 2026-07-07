@@ -146,13 +146,19 @@ _TC_IV_RANK_NAME = TieredCopy(
 _TC_IV_RANK_MAIN = TieredCopy(
     beginner=(
         "If this number is high, today’s expected swing at the money is high compared with "
-        "other strikes in the same snapshot (0 = lowest, 1 = highest)."
+        "other strikes in this same snapshot right now — not compared with history "
+        "(0 = lowest, 1 = highest). This does not tell us which direction the stock will move."
     ),
     intermediate=(
         "Percentile of ATM IV versus all implied volatilities observed in this chain snapshot "
-        "(0 = lowest, 1 = highest)."
+        "(0 = lowest, 1 = highest). This is a within-snapshot cross-section, not a rank vs. "
+        "historical IV, and it is informational only — it does not vote a market direction."
     ),
-    advanced="ATM IV percentile vs chain IV sample; cross-sectional rank only.",
+    advanced=(
+        "ATM IV percentile vs this chain's own cross-sectional IV sample only (not vs. "
+        "historical IV). Structurally skewed low by the smile (ATM sits below OTM skew), so it "
+        "is display-only and excluded from directional voting."
+    ),
 )
 _TC_IV_RANK_NO_IV = TieredCopy(
     beginner="We could not rank swings because there is not enough volatility data in this list.",

@@ -93,7 +93,12 @@ def compute_implied_move(
     td = config.trading_days_per_year
     ann = (straddle / (fac * underlying * math.sqrt(t_year))) * 100.0
     daily = ann / math.sqrt(td)
-    period = ann * math.sqrt(dte / td)
+    # Scale the annualized vol back down to the option's own period using calendar
+    # days (dte / 365), matching the calendar-day annualization (t_year = dte/365)
+    # used to derive `ann` above. Using trading-day scaling (dte/252) here would mix
+    # two different day-count conventions and overstate the period figure by
+    # roughly sqrt(365/252) ≈ 1.2x.
+    period = ann * math.sqrt(dte / 365.0)
     detail = {
         "raw_straddle_pct": round(pct, 4),
         "raw_straddle_abs": round(straddle, 4),

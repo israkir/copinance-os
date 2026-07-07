@@ -15,12 +15,24 @@ from copinance_os.data.analytics.options.positioning import (
     DEFAULT_POSITIONING_METHODOLOGY,
     build_options_positioning,
 )
-from copinance_os.data.analytics.options.positioning.bias import DEFAULT_BIAS_CONFIG, BiasConfig
+from copinance_os.data.analytics.options.positioning.bias import (
+    DEFAULT_BIAS_CONFIG,
+    BiasConfig,
+    compute_signal_agreement,
+)
 from copinance_os.data.analytics.options.positioning.charm import compute_charm_exposure
+from copinance_os.data.analytics.options.positioning.compose import _collapse_duplicate_ratio_vote
+from copinance_os.data.analytics.options.positioning.gex import (
+    DEFAULT_GEX_CONFIG,
+    compute_gamma_regime,
+    gex_methodology,
+)
 from copinance_os.data.analytics.options.positioning.mispricing import compute_mispricing
 from copinance_os.data.analytics.options.positioning.moneyness import compute_moneyness_buckets
 from copinance_os.data.analytics.options.positioning.pin_risk import compute_pin_risk
 from copinance_os.data.analytics.options.positioning.vanna import compute_vanna_exposure
+from copinance_os.data.analytics.options.positioning.volatility import compute_volatility_signals
+from copinance_os.data.literacy import options_positioning as _pt
 from copinance_os.domain.exceptions import ValidationError
 from copinance_os.domain.models.entities.profile import FinancialLiteracy
 from copinance_os.domain.models.market import OptionContract, OptionGreeks, OptionsChain, OptionSide
@@ -442,6 +454,15 @@ def test_gamma_flip_interpolated() -> None:
     flip = raw["gamma_flip_strike"]
     assert flip is not None
     assert float(flip) == pytest.approx(106.25, rel=1e-4)
+    # Spot (150) is above the flip strike (~106.25), so gamma-flip-vs-spot casts a
+    # genuine directional vote here -- unlike net-gamma/gamma-regime, which never do.
+    gamma_signals = raw["signal_categories"]["gamma"]["signals"]
+    flip_row = next(
+        s
+        for s in gamma_signals
+        if s["name"] == _pt.name_gamma_flip_strike(FinancialLiteracy.INTERMEDIATE)
+    )
+    assert flip_row["direction"] == "bullish"
 
 
 @pytest.mark.unit
@@ -544,7 +565,15 @@ def test_brenner_subrahmanyam_implied_move(toy_chain: tuple) -> None:
         expected_ann / math.sqrt(252.0), rel=1e-4
     )
     assert detail["period_implied_move_pct"] == pytest.approx(
-        expected_ann * math.sqrt(dte / 252.0), rel=1e-4
+        expected_ann * math.sqrt(dte / 365.0), rel=1e-4
+    )
+    # Period figure must be derived using the same calendar-day convention as the
+    # annualization (dte/365), not trading-day scaling (dte/252) -- otherwise it
+    # overstates the move by ~1.2x relative to the model's own math. This identity
+    # (period == raw_straddle_pct / straddle_ann_factor) holds only when both use
+    # calendar days consistently.
+    assert detail["period_implied_move_pct"] / detail["raw_straddle_pct"] == pytest.approx(
+        1.0 / 0.798, rel=1e-3
     )
 
 
@@ -651,6 +680,35 @@ def test_implied_move_dte_one_day() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("atm_iv_pct", [1.0, 18.0, 99.0])
+def test_iv_rank_signal_direction_always_neutral(toy_chain: tuple, atm_iv_pct: float) -> None:
+    """IV rank is a within-chain cross-sectional percentile, structurally biased low by
+    the smile (ATM sits below OTM skew). It must never vote a direction, regardless of
+    how extreme the percentile is -- only the ATM IV level signal may carry direction.
+    """
+    chain, calls, puts = toy_chain
+    nearest_exp = calls[0].expiration_date.isoformat()
+    # Construct an IV sample distribution where the ATM print sits at either extreme,
+    # so the naive percentile-based direction logic would previously have fired
+    # "bearish" (high rank) or "bullish" (low rank).
+    all_iv_samples = [1.0, 5.0, 10.0, 15.0, 20.0, 50.0, 99.0]
+    signals, partial = compute_volatility_signals(
+        calls,
+        puts,
+        nearest_exp,
+        595.0,
+        all_iv_samples,
+        FinancialLiteracy.INTERMEDIATE,
+    )
+    assert len(signals) == 2
+    rank_signal = signals[1]
+    assert rank_signal["direction"] == "neutral"
+    # The percentile value itself is still computed and exposed for display.
+    assert "value" in rank_signal
+    assert partial["iv_rank"] == pytest.approx(rank_signal["value"], rel=1e-3)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("skew25", "expected_regime"),
     [(3.5, "steep_put"), (-2.0, "call_skewed"), (0.0, "normal")],
@@ -744,6 +802,64 @@ def test_butterfly_positive_when_wings_rich() -> None:
         chain, calls, puts, {"current_price": 100.0}, "BF", "near", as_of_date=date(2026, 8, 15)
     )
     assert raw["iv_metrics"]["butterfly_25_delta"] == pytest.approx(6.0, rel=1e-6)
+
+
+@pytest.mark.unit
+def test_25_delta_strike_selection_excludes_none_delta_contract() -> None:
+    """A contract with a genuinely missing delta must never win the nearest-to-25-delta
+    search via a fake ``0.0`` substitution.
+
+    Without the fix, ``numeric_greek(c, "delta") or 0.0`` would let the None-delta call
+    below (whose fake key is ``abs(0.0 - 0.25) == 0.25``) beat the only real candidate
+    (delta 0.6, key ``abs(0.6 - 0.25) == 0.35``), incorrectly picking the missing-delta
+    contract's IV (30%) for the skew calculation instead of the real one (20%).
+    """
+    exp = date(2026, 11, 1)
+
+    def leg(side: OptionSide, strike: float, delta: float | None, iv: float) -> OptionContract:
+        return OptionContract(
+            underlying_symbol="ND",
+            contract_symbol="NDX",
+            side=side,
+            strike=Decimal(str(strike)),
+            expiration_date=exp,
+            bid=Decimal("1"),
+            ask=Decimal("1"),
+            volume=10,
+            open_interest=100,
+            implied_volatility=Decimal(str(iv / 100.0)),
+            greeks=(
+                OptionGreeks(
+                    delta=Decimal(str(delta)),
+                    gamma=Decimal("0.01"),
+                    theta=Decimal("0"),
+                    vega=Decimal("0"),
+                    rho=Decimal("0"),
+                )
+                if delta is not None
+                else None
+            ),
+        )
+
+    calls = [
+        leg(OptionSide.CALL, 101.0, None, 30.0),  # missing delta -- must be excluded
+        leg(OptionSide.CALL, 110.0, 0.6, 20.0),  # only real candidate
+    ]
+    puts = [leg(OptionSide.PUT, 90.0, -0.25, 22.0)]
+    chain = OptionsChain(
+        underlying_symbol="ND",
+        expiration_date=exp,
+        available_expirations=[exp],
+        underlying_price=Decimal("100"),
+        calls=calls,
+        puts=puts,
+    )
+    raw = _build_pos_dict(
+        chain, calls, puts, {"current_price": 100.0}, "ND", "near", as_of_date=date(2026, 10, 15)
+    )
+    # put_iv (22.0) - call_iv should use the real 0.6-delta call's IV (20.0), not the
+    # None-delta call's IV (30.0).
+    assert raw["iv_metrics"]["skew_25_delta"] == pytest.approx(2.0, rel=1e-6)
 
 
 @pytest.mark.unit
@@ -847,6 +963,130 @@ def test_signal_agreement_strong_bullish_on_toy(toy_chain: tuple) -> None:
         chain, calls, puts, {"current_price": 595.0}, "SPY", "near", as_of_date=TOY_AS_OF
     )
     assert raw["signal_agreement"] == "strong_bullish"
+
+
+@pytest.mark.unit
+def test_gex_methodology_documents_scope_split() -> None:
+    """Regime is scored over the whole book; profile/flip-strike is nearest-expiry
+    only. This scope split is confusing enough (two related-but-different scopes)
+    that the methodology spec must call it out explicitly.
+    """
+    spec = gex_methodology(DEFAULT_GEX_CONFIG)
+    assumptions_text = " ".join(spec.assumptions).lower()
+    assert "whole book" in assumptions_text
+    assert "all expirations" in assumptions_text
+    assert "nearest expiration" in assumptions_text
+
+
+@pytest.mark.unit
+def test_gamma_regime_signals_never_vote_direction(toy_chain: tuple) -> None:
+    """Net gamma / gamma regime describe a volatility regime, not a directional bet.
+
+    They must never contribute a bullish/bearish vote to signal agreement -- only
+    net-delta and gamma-flip-vs-spot are genuinely directional among gamma signals.
+    The regime is still classified and explained for display purposes.
+    """
+    chain, calls, puts = toy_chain
+    lit = FinancialLiteracy.INTERMEDIATE
+    signals, net, regime, _expl = compute_gamma_regime(calls, puts, 595.0, lit)
+    assert regime == "positive_gamma"
+    assert net > 0  # a real directional-looking value is present...
+    net_gamma_row = next(s for s in signals if s["name"] == _pt.name_net_gamma(lit))
+    regime_row = next(s for s in signals if s["name"] == _pt.name_gamma_regime(lit))
+    # ...but neither row casts a vote.
+    assert net_gamma_row["direction"] == "neutral"
+    assert regime_row["direction"] == "neutral"
+
+
+@pytest.mark.unit
+def test_gamma_flip_and_net_delta_remain_directional_votes(toy_chain: tuple) -> None:
+    """Only net-delta and gamma-flip-vs-spot vote among gamma-related signals."""
+    chain, calls, puts = toy_chain
+    raw = _build_pos_dict(
+        chain, calls, puts, {"current_price": 595.0}, "SPY", "near", as_of_date=TOY_AS_OF
+    )
+    gamma_signals = raw["signal_categories"]["gamma"]["signals"]
+    directions_by_name = {s["name"]: s["direction"] for s in gamma_signals}
+    assert directions_by_name[_pt.name_net_gamma(FinancialLiteracy.INTERMEDIATE)] == "neutral"
+    assert directions_by_name[_pt.name_gamma_regime(FinancialLiteracy.INTERMEDIATE)] == "neutral"
+    # Gamma-flip-vs-spot is genuinely directional (bullish/bearish/neutral depending
+    # on whether the front expiry's cumulative GEX actually flips sign); for this toy
+    # chain there's no sign change so it settles on "neutral" -- what matters is that
+    # it is computed independently from spot-vs-flip-strike, not forced neutral like
+    # the regime signals above.
+    assert directions_by_name[_pt.name_gamma_flip_strike(FinancialLiteracy.INTERMEDIATE)] in (
+        "bullish",
+        "bearish",
+        "neutral",
+    )
+    assert directions_by_name[_pt.name_net_delta_exposure(FinancialLiteracy.INTERMEDIATE)] in (
+        "bullish",
+        "bearish",
+    )
+
+
+@pytest.mark.unit
+def test_collapse_duplicate_put_call_ratio_vote() -> None:
+    """Only one P/C-ratio vote is counted even when both variants are present."""
+    signals = [
+        {"name": "Put/Call OI Ratio", "direction": "bearish"},
+        {"name": "Dollar Put/Call OI Ratio", "direction": "bullish"},
+        {"name": "Call OI Share", "direction": "neutral"},
+    ]
+    collapsed = _collapse_duplicate_ratio_vote(
+        signals, dollar_name="Dollar Put/Call OI Ratio", contract_name="Put/Call OI Ratio"
+    )
+    names = {s["name"] for s in collapsed}
+    assert "Put/Call OI Ratio" not in names
+    assert "Dollar Put/Call OI Ratio" in names
+    assert len(collapsed) == 2
+
+    # Falls back to the contract-count variant when the dollar variant is absent.
+    signals_no_dollar = [s for s in signals if s["name"] != "Dollar Put/Call OI Ratio"]
+    collapsed_fallback = _collapse_duplicate_ratio_vote(
+        signals_no_dollar, dollar_name="Dollar Put/Call OI Ratio", contract_name="Put/Call OI Ratio"
+    )
+    assert collapsed_fallback == signals_no_dollar
+
+
+@pytest.mark.unit
+def test_signal_agreement_counts_single_pc_ratio_vote_not_double(toy_chain: tuple) -> None:
+    """Both P/C ratio variants exist for the toy chain, but agreement must reflect
+    only one vote for that pair rather than two near-duplicate votes.
+    """
+    lit = FinancialLiteracy.INTERMEDIATE
+    contract_dir = "bearish"
+    dollar_dir = "bearish"
+    positioning_with_both = [
+        {"name": _pt.name_put_call_oi(lit), "direction": contract_dir},
+        {"name": _pt.name_dollar_put_call_oi(lit), "direction": dollar_dir},
+        {"name": "Neutral Signal", "direction": "neutral"},
+    ]
+    collapsed = _collapse_duplicate_ratio_vote(
+        positioning_with_both,
+        dollar_name=_pt.name_dollar_put_call_oi(lit),
+        contract_name=_pt.name_put_call_oi(lit),
+    )
+    agreement_collapsed = compute_signal_agreement(collapsed, [], [])
+    agreement_uncollapsed = compute_signal_agreement(positioning_with_both, [], [])
+    # Uncollapsed double-counts the pair (2 bearish votes -> strong agreement);
+    # collapsed reflects the single true vote (1 bearish vote, still strong, but not
+    # double-weighted against other signals in a larger mixed set).
+    assert agreement_uncollapsed == "strong_bearish"
+    assert agreement_collapsed == "strong_bearish"
+    mixed_with_both = [
+        *positioning_with_both,
+        {"name": "Other Bullish", "direction": "bullish"},
+    ]
+    mixed_collapsed = _collapse_duplicate_ratio_vote(
+        mixed_with_both,
+        dollar_name=_pt.name_dollar_put_call_oi(lit),
+        contract_name=_pt.name_put_call_oi(lit),
+    )
+    # 1 bearish (collapsed) vs 1 bullish -> mixed, not skewed bearish by double count.
+    assert compute_signal_agreement(mixed_collapsed, [], []) == "mixed"
+    # Without collapsing, the duplicate P/C vote would incorrectly tip it bearish.
+    assert compute_signal_agreement(mixed_with_both, [], []) == "moderate_bearish"
 
 
 @pytest.mark.unit

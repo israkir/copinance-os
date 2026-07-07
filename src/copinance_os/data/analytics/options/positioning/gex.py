@@ -41,7 +41,14 @@ def gex_methodology(config: GexConfig) -> MethodologySpec:
         id="options.positioning.gex",
         version="v1",
         model_family="dealer_gamma_exposure",
-        assumptions=("Nearest listed expiry only; OI-weighted gamma with spot scaling.",),
+        assumptions=(
+            "Nearest listed expiry only; OI-weighted gamma with spot scaling.",
+            "Scope split: the net-gamma regime score (`compute_gamma_regime`) is "
+            "computed over the whole book across all expirations, while the "
+            "gamma-profile / gamma-flip-strike calculation (`compute_gex_profile`) is "
+            "scoped to the nearest expiration only. These are different scopes "
+            "computing conceptually related but distinct things.",
+        ),
         limitations=("Dealer positioning is inferred heuristically from public chain data.",),
         references=(),
         parameters={
@@ -178,11 +185,17 @@ def compute_gamma_regime(
             expl = _pt.expl_gamma_balanced(lit)
 
     net_rounded = round(net, 4)
+    # Net gamma / gamma-regime describe a *volatility regime* (positive gamma = dealers
+    # dampen moves by hedging counter-trend; negative gamma = dealers amplify moves by
+    # hedging with-trend) -- not a directional bet on the underlying. They must never
+    # contribute a bullish/bearish vote to signal agreement; only net-delta and
+    # gamma-flip-vs-spot are genuinely directional among gamma-related signals. The
+    # regime value/explanation are still computed and exposed for display.
     signals = [
         {
             "name": _pt.name_net_gamma(lit),
             "value": net_rounded,
-            "direction": "bullish" if net > 0 else "bearish" if net < 0 else "neutral",
+            "direction": "neutral",
             "explanation": _pt.expl_net_gamma(lit),
         },
         {
@@ -190,11 +203,7 @@ def compute_gamma_regime(
             "value": (
                 1.0 if regime == "positive_gamma" else -1.0 if regime == "negative_gamma" else 0.0
             ),
-            "direction": (
-                "bullish"
-                if regime == "positive_gamma"
-                else "bearish" if regime == "negative_gamma" else "neutral"
-            ),
+            "direction": "neutral",
             "explanation": expl,
         },
     ]

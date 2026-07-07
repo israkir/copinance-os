@@ -24,8 +24,6 @@ from copinance_os.domain.models.market import OptionContract
 class VolatilityConfig:
     iv_rank_bearish: float = 0.72
     iv_rank_bullish: float = 0.35
-    iv_rank_dir_bearish: float = 0.65
-    iv_rank_dir_bullish: float = 0.4
 
 
 DEFAULT_VOLATILITY_CONFIG = VolatilityConfig()
@@ -121,11 +119,12 @@ def compute_volatility_signals(
         if iv_rank >= config.iv_rank_bearish
         else "bullish" if iv_rank <= config.iv_rank_bullish else "neutral"
     )
-    rank_dir: Literal["bullish", "bearish", "neutral"] = (
-        "bearish"
-        if iv_rank >= config.iv_rank_dir_bearish
-        else "bullish" if iv_rank <= config.iv_rank_dir_bullish else "neutral"
-    )
+    # IV rank here is ATM IV's percentile within this chain's own cross-section of
+    # strikes, not a rank against IV history. Because the volatility smile/skew puts
+    # ATM at (or near) the bottom of the smile, this percentile is structurally biased
+    # low, which would otherwise make it almost always "vote" bullish. It is display
+    # (and explanation) only -- it never contributes a directional vote.
+    rank_dir: Literal["bullish", "bearish", "neutral"] = "neutral"
 
     signals = [
         {

@@ -63,28 +63,33 @@ def compute_surface_signals(
     if nearest_exp and underlying > 0:
         c_near = contracts_for_expiration(calls, nearest_exp)
         p_near = contracts_for_expiration(puts, nearest_exp)
-        c_candidates = [
-            c
+        # A contract with a genuinely missing (None) delta must be excluded from the
+        # nearest-to-target-delta search entirely, not silently treated as delta=0.0
+        # via `numeric_greek(c, "delta") or 0.0` -- that would let a data-quality gap
+        # incorrectly "win" the search against contracts with real, weaker-matching
+        # deltas.
+        c_candidates: list[tuple[OptionContract, float]] = [
+            (c, delta)
             for c in c_near
             if (contract_iv_pct(c) or 0.0) > 0
             and ((contract_oi(c) or 0) + (contract_vol(c) or 0)) > 0
+            and (delta := numeric_greek(c, "delta")) is not None
         ]
-        p_candidates = [
-            p
+        p_candidates: list[tuple[OptionContract, float]] = [
+            (p, delta)
             for p in p_near
             if (contract_iv_pct(p) or 0.0) > 0
             and ((contract_oi(p) or 0) + (contract_vol(p) or 0)) > 0
+            and (delta := numeric_greek(p, "delta")) is not None
         ]
         if c_candidates:
-            call_25 = min(
-                c_candidates, key=lambda c: abs((numeric_greek(c, "delta") or 0.0) - 0.25)
-            )
+            call_25, _ = min(c_candidates, key=lambda item: abs(item[1] - 0.25))
             call_iv = contract_iv_pct(call_25) or 0.0
         else:
             call_25 = None
             call_iv = 0.0
         if p_candidates:
-            put_25 = min(p_candidates, key=lambda p: abs((numeric_greek(p, "delta") or 0.0) + 0.25))
+            put_25, _ = min(p_candidates, key=lambda item: abs(item[1] + 0.25))
             put_iv = contract_iv_pct(put_25) or 0.0
         else:
             put_25 = None
@@ -97,15 +102,13 @@ def compute_surface_signals(
         butterfly_25 = None
         skew_regime: Literal["steep_put", "normal", "call_skewed"] | None = None
         if c_candidates:
-            call_10 = min(
-                c_candidates, key=lambda c: abs((numeric_greek(c, "delta") or 0.0) - 0.10)
-            )
+            call_10, _ = min(c_candidates, key=lambda item: abs(item[1] - 0.10))
             call_10_iv = contract_iv_pct(call_10) or 0.0
         else:
             call_10 = None
             call_10_iv = 0.0
         if p_candidates:
-            put_10 = min(p_candidates, key=lambda p: abs((numeric_greek(p, "delta") or 0.0) + 0.10))
+            put_10, _ = min(p_candidates, key=lambda item: abs(item[1] + 0.10))
             put_10_iv = contract_iv_pct(put_10) or 0.0
         else:
             put_10 = None
