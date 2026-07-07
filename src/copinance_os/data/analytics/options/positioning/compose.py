@@ -52,6 +52,20 @@ from copinance_os.domain.literacy import FinancialLiteracy
 from copinance_os.domain.models.market import OptionContract, OptionsChain
 
 
+def _collapse_duplicate_ratio_vote(
+    signals: list[dict[str, Any]], *, dollar_name: str, contract_name: str
+) -> list[dict[str, Any]]:
+    """Drop the contract-count P/C ratio row from a signal list when the
+    dollar-notional variant is also present, so the two near-duplicate ratios cast
+    only one directional vote. Falls back to the contract-count variant when the
+    dollar variant is absent (or wasn't computed, e.g. zero dollar call OI).
+    """
+    names = {s.get("name") for s in signals}
+    if dollar_name in names and contract_name in names:
+        return [s for s in signals if s.get("name") != contract_name]
+    return signals
+
+
 def compose_options_positioning_payload(
     *,
     chain: OptionsChain,
@@ -412,6 +426,18 @@ def compose_options_positioning_payload(
     gamma_signals: list[dict[str, Any]] = gamma_sigs
     structure_signals: list[dict[str, Any]] = structure_sigs
 
+    # `positioning_signals` keeps both the contract-count and dollar-notional put/call
+    # ratio rows for display, but they measure the same underlying skew and would
+    # otherwise cast two near-duplicate votes into signal agreement, artificially
+    # inflating "strong agreement" readings. Collapse each such pair down to a single
+    # vote (preferring the dollar-notional variant when it was computed) for the
+    # purposes of the agreement tally only -- the display list is untouched.
+    positioning_vote_signals = _collapse_duplicate_ratio_vote(
+        positioning_signals,
+        dollar_name=_pt.name_dollar_put_call_oi(lit),
+        contract_name=_pt.name_put_call_oi(lit),
+    )
+
     signal_categories = {
         "positioning": {
             "signals": positioning_signals,
@@ -454,7 +480,7 @@ def compose_options_positioning_payload(
         },
     }
     signal_agreement = compute_signal_agreement(
-        positioning_signals,
+        positioning_vote_signals,
         flow_signals,
         gamma_signals,
     )
