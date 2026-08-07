@@ -19,6 +19,16 @@ from copinance_os.domain.models.options.positioning import SignalAgreement
 # separates "no greeks but real OI and flow" from "no greeks and no notional".
 MIN_BIAS_COVERAGE = 0.60
 
+# Score threshold for a directional label, mirroring
+# app/services/decision/combine.py::EDGE_LO and consensus.py::_direction_for_edge so
+# Decision Lens and the positioning matrix agree on how confident a read must be
+# before it is asserted rather than called neutral. Unlike combine.py's edge (which
+# is bounded to [-1, 1]), the bias score is an unbounded weighted log-odds sum, so
+# the threshold is expressed on that scale: 0.30 corresponds to sigmoid(0.30) ≈ 57.4%
+# on the two-way read — a starting value to be recalibrated from positioning_outcomes
+# once samples accrue.
+BIAS_LO = 0.30
+
 REF_BOLLEN_WHALEY_2004 = MethodologyReference(
     id="REF_BOLLEN_WHALEY_2004",
     title="Bollen, N. P. B., & Whaley, R. E. (2004), Does net buying pressure affect the shape of implied volatility functions?, Journal of Finance, 59(2), 711-753",
@@ -246,7 +256,9 @@ def compute_signal_agreement(
     rows = [*positioning, *flow, *gamma]
     bull = sum(1 for r in rows if r.get("direction") == "bullish")
     bear = sum(1 for r in rows if r.get("direction") == "bearish")
-    if bull == bear or bull + bear == 0:
+    if bull + bear == 0:
+        return "unavailable"
+    if bull == bear:
         return "mixed"
     dom_bull = bull > bear
     frac = max(bull, bear) / (bull + bear)
@@ -275,13 +287,46 @@ def signal_agreement_direction(agreement: str) -> str:
     return "neutral"
 
 
-def bias_probabilities(score: float) -> tuple[float, float, float]:
-    bullish_probability = sigmoid(score)
-    bearish_probability = sigmoid(-score)
-    neutral_probability = max(0.0, 1.0 - max(bullish_probability, bearish_probability))
-    prob_total = bullish_probability + bearish_probability + neutral_probability
+def compute_driver_agreement_ratio(drivers: tuple[BiasDriver, ...]) -> float:
+    """Fraction of applied driver weight on the majority-sign side (0-1); 0 with no drivers.
+
+    Mirrors ``app/services/decision/combine.py::agreement_ratio`` over
+    :class:`BiasDriver` rows instead of ``Factor`` rows, so the two lenses derive
+    "how much do the signals agree" the same way.
+    """
+    applied = [d for d in drivers if d.applied]
+    if not applied:
+        return 0.0
+    bullish_w = sum(d.weight_share for d in applied if d.direction == "bullish")
+    bearish_w = sum(d.weight_share for d in applied if d.direction == "bearish")
+    total_w = sum(d.weight_share for d in applied)
+    return max(bullish_w, bearish_w) / max(total_w, 1e-9)
+
+
+def bias_probabilities(
+    score: float, *, coverage_weight: float, agreement_ratio: float
+) -> tuple[float, float, float]:
+    """Bullish / bearish / neutral mass from the score, coverage, and driver agreement.
+
+    ``directional_probability = sigmoid(score)`` is the genuine two-way read — exactly
+    0.5 at score 0, unlike the old construction where ``neutral = min(bull, bear)``
+    made "neutral" algebraically unreachable and pinned the two-way probability's
+    effective floor at 33.3%. ``neutral_mass`` is now an independent quantity driven
+    by how much of the driver catalog voted and how much those drivers agreed —
+    mirrors ``app/services/decision/combine.py::probability_triplet``.
+    """
+    directional_probability = sigmoid(score)
+    neutral_mass = (1.0 - agreement_ratio) * 0.5 + (1.0 - coverage_weight) * 0.25
+    neutral_cap = 0.85 - 0.25 * coverage_weight
+    neutral_mass = max(0.0, min(neutral_cap, neutral_mass))
+    remaining = 1.0 - neutral_mass
+    bullish_probability = remaining * directional_probability
+    bearish_probability = remaining * (1.0 - directional_probability)
+    prob_total = bullish_probability + bearish_probability + neutral_mass
+    if prob_total <= 0.0:
+        return (0.33, 0.33, 0.34)
     return (
         bullish_probability / prob_total,
         bearish_probability / prob_total,
-        neutral_probability / prob_total,
+        neutral_mass / prob_total,
     )

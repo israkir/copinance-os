@@ -15,16 +15,21 @@ from copinance_os.data.analytics.options.positioning import (
     build_options_positioning,
 )
 from copinance_os.data.analytics.options.positioning.bias import (
+    BIAS_LO,
     DEFAULT_BIAS_CONFIG,
+    bias_probabilities,
+    compute_driver_agreement_ratio,
     compute_signal_agreement,
 )
 from copinance_os.data.analytics.options.positioning.charm import compute_charm_exposure
 from copinance_os.data.analytics.options.positioning.compose import _collapse_duplicate_ratio_vote
+from copinance_os.data.analytics.options.positioning.contracts import contract_iv_pct
 from copinance_os.data.analytics.options.positioning.gex import (
     DEFAULT_GEX_CONFIG,
     compute_gamma_regime,
     gex_methodology,
 )
+from copinance_os.data.analytics.options.positioning.math import sigmoid
 from copinance_os.data.analytics.options.positioning.mispricing import compute_mispricing
 from copinance_os.data.analytics.options.positioning.moneyness import compute_moneyness_buckets
 from copinance_os.data.analytics.options.positioning.pin_risk import compute_pin_risk
@@ -906,6 +911,106 @@ def test_bias_weight_constants_exposed() -> None:
     assert DEFAULT_BIAS_CONFIG.weights["call_oi_ratio"] == pytest.approx(1.8)
     assert DEFAULT_BIAS_CONFIG.weights["net_delta"] == pytest.approx(1.2)
     assert "dollar_put_call_oi_ratio" in DEFAULT_BIAS_CONFIG.ranges
+
+
+@pytest.mark.unit
+def test_bias_probabilities_score_zero_is_genuine_coin_flip() -> None:
+    """score == 0 must be the actual 2-way midpoint, not the old 33.3%-centred read."""
+    bullish, bearish, neutral = bias_probabilities(0.0, coverage_weight=1.0, agreement_ratio=0.0)
+    # With full coverage and zero driver agreement, all mass sits in neutral, but the
+    # underlying two-way split (bullish vs bearish once remaining mass is allocated)
+    # must be exactly 50/50 at score 0 — recover it by re-deriving from bullish+bearish.
+    assert bullish == pytest.approx(bearish)
+
+
+@pytest.mark.unit
+def test_bias_probabilities_directional_probability_is_half_at_score_zero() -> None:
+    """sigmoid(0) == 0.5 exactly — the genuine two-way read the arc should plot."""
+    assert sigmoid(0.0) == pytest.approx(0.5)
+
+
+@pytest.mark.unit
+def test_bias_probabilities_full_agreement_zero_neutral_mass() -> None:
+    bullish, bearish, neutral = bias_probabilities(1.0, coverage_weight=1.0, agreement_ratio=1.0)
+    assert neutral == pytest.approx(0.0)
+    assert bullish + bearish == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_bias_probabilities_sum_to_one() -> None:
+    for score in (-2.0, -0.3, 0.0, 0.3, 1.5):
+        for coverage in (0.2, 0.6, 1.0):
+            for agreement in (0.0, 0.5, 1.0):
+                bullish, bearish, neutral = bias_probabilities(
+                    score, coverage_weight=coverage, agreement_ratio=agreement
+                )
+                assert bullish + bearish + neutral == pytest.approx(1.0)
+                assert bullish >= 0.0 and bearish >= 0.0 and neutral >= 0.0
+
+
+@pytest.mark.unit
+def test_bias_lo_threshold_matches_documented_two_way_probability() -> None:
+    assert sigmoid(BIAS_LO) == pytest.approx(0.574, abs=1e-3)
+
+
+@pytest.mark.unit
+def test_compute_driver_agreement_ratio_no_drivers_is_zero() -> None:
+    assert compute_driver_agreement_ratio(()) == 0.0
+
+
+@pytest.mark.unit
+def test_signal_agreement_empty_is_unavailable_not_mixed() -> None:
+    """No positioning/flow/gamma rows at all is a distinct state from a genuine tie."""
+    assert compute_signal_agreement([], [], []) == "unavailable"
+
+
+@pytest.mark.unit
+def test_signal_agreement_tie_is_mixed() -> None:
+    rows = [{"direction": "bullish"}, {"direction": "bearish"}]
+    assert compute_signal_agreement(rows, [], []) == "mixed"
+
+
+@pytest.mark.unit
+def test_contract_iv_pct_preserves_extreme_iv_above_200_percent() -> None:
+    """A genuine 250% IV (decimal fraction 2.5) must not be left unscaled as '2.5%'."""
+    c = _gc(580, 100, 50, 2.5, 0.5, 0.02)
+    # _gc scales iv/100 only when iv > 2 in the test helper's own convention (18.0 ->
+    # 0.18); pass the raw decimal fraction directly to bypass that and assert the
+    # production code trusts it as-is.
+    c = c.model_copy(update={"implied_volatility": Decimal("2.5")})
+    assert contract_iv_pct(c) == pytest.approx(250.0)
+
+
+@pytest.mark.unit
+def test_contract_iv_pct_scales_normal_decimal_fraction() -> None:
+    c = _gc(580, 100, 50, 18.0, 0.5, 0.02)
+    assert contract_iv_pct(c) == pytest.approx(18.0)
+
+
+@pytest.mark.unit
+def test_balanced_chain_labels_neutral_not_bullish() -> None:
+    """Regression guard for F1: a perfectly symmetric chain must not read 'bullish'.
+
+    Previously this rendered market_bias='bullish' with confidence pinned near 33%
+    because the old 3-way split made 'neutral' algebraically unreachable and any
+    razor-thin positive score (here, driven by the P/C ratio driver's asymmetric
+    range around 1.15 rather than 1.0) tipped the argmax to bullish.
+    """
+    exp = date(2026, 1, 16)
+    calls = [_gc(590, 10000, 500, 18.0, 0.5, 0.02)]
+    puts = [_gp(590, 10000, 500, 18.0, -0.5, 0.02)]
+    chain = OptionsChain(
+        underlying_symbol="SPY",
+        expiration_date=exp,
+        available_expirations=[exp],
+        underlying_price=Decimal("590"),
+        calls=calls,
+        puts=puts,
+    )
+    raw = _build_pos_dict(
+        chain, calls, puts, {"current_price": 590.0}, "SPY", "near", as_of_date=TOY_AS_OF
+    )
+    assert raw["market_bias"] == "neutral"
 
 
 @pytest.mark.unit

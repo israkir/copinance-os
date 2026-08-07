@@ -26,6 +26,7 @@ SignalAgreement = Literal[
     "moderate_bearish",
     "weak_bearish",
     "mixed",
+    "unavailable",
 ]
 
 
