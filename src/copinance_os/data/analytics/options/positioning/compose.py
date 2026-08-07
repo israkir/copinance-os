@@ -6,9 +6,11 @@ from datetime import date
 from typing import Any, Literal
 
 from copinance_os.data.analytics.options.positioning.bias import (
+    BIAS_LO,
     MIN_BIAS_COVERAGE,
     bias_probabilities,
     compute_bias_drivers,
+    compute_driver_agreement_ratio,
     compute_signal_agreement,
 )
 from copinance_os.data.analytics.options.positioning.charm import compute_charm_exposure
@@ -222,19 +224,27 @@ def compose_options_positioning_payload(
         "drivers_missing": [key for key, ok in driver_available.items() if not ok],
     }
 
-    bullish_probability, bearish_probability, neutral_probability = bias_probabilities(score)
+    agreement_ratio = compute_driver_agreement_ratio(bias_breakdown.drivers)
+    bullish_probability, bearish_probability, neutral_probability = bias_probabilities(
+        score, coverage_weight=coverage_weight, agreement_ratio=agreement_ratio
+    )
 
-    if bullish_probability >= bearish_probability and bullish_probability >= neutral_probability:
+    # Label from the score threshold, not from which of the three probabilities
+    # happens to be largest — mirrors combine.py::_tone_for_edge /
+    # consensus.py::_direction_for_edge so a coin-flip score reads "neutral" instead
+    # of tipping into "bullish"/"bearish" off a razor-thin probability margin.
+    if score >= BIAS_LO:
         bias: Literal["bullish", "bearish", "neutral"] = "bullish"
-        confidence = bullish_probability
-    elif bearish_probability >= bullish_probability and bearish_probability >= neutral_probability:
+    elif score <= -BIAS_LO:
         bias = "bearish"
-        confidence = bearish_probability
     else:
         bias = "neutral"
-        confidence = neutral_probability
 
-    confidence *= 0.5 + 0.5 * data_quality
+    confidence = {
+        "bullish": bullish_probability,
+        "bearish": bearish_probability,
+        "neutral": neutral_probability,
+    }[bias]
 
     strikes = sorted(
         {round(contract_strike(c), 2) for c in (*calls, *puts) if (contract_oi(c) or 0) > 0}

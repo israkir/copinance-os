@@ -65,9 +65,11 @@ def contract_iv_pct(c: OptionContract) -> float | None:
     iv = safe_float(raw)
     if iv <= 0:
         return None
-    if iv < 2.0:
-        iv *= 100.0
-    return iv
+    # implied_volatility is a decimal fraction by provider-boundary invariant (see
+    # yfinance.py::_yahoo_option_implied_volatility_to_sigma) — trust it rather than
+    # re-guessing from magnitude, which silently left genuine >200% IV (0DTE,
+    # biotech binaries, squeezes) unscaled because it looked "already in percent".
+    return iv * 100.0
 
 
 def contract_bid_ask(c: OptionContract) -> tuple[float, float]:
