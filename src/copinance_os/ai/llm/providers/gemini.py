@@ -24,6 +24,7 @@ from copinance_os.ai.llm.tool_loop_streaming import (
     generate_turn_text_with_stream,
     maybe_emit_tool_round_rollback,
 )
+from copinance_os.ai.llm.tool_result_serialization import budget_tool_result, compact_json
 from copinance_os.core.execution_engine.question_driven_tool_summary import (
     build_partial_synthesis_message,
     is_tool_call_json_text,
@@ -812,22 +813,14 @@ class GeminiProvider(LLMProvider):
                     if len(recent_tool_calls) > max_recent_history:
                         recent_tool_calls.pop(0)
 
-                    # Serialize response data for storage
+                    # Serialize response data for storage, with a real size budget —
+                    # applied here so it also reaches the model-facing result_data
+                    # below, not just this recorded copy (see tool_result_serialization).
                     response_data = None
                     if tool_result.success and tool_result.data is not None:
-                        # Serialize data, potentially truncating very large responses
-                        serialized_data = self._make_json_serializable(tool_result.data)
-                        # Truncate large lists (e.g., historical data with 1000+ points)
-                        if isinstance(serialized_data, list) and len(serialized_data) > 100:
-                            response_data = {
-                                "_truncated": True,
-                                "_total_items": len(serialized_data),
-                                "_items_shown": 100,
-                                "data": serialized_data[:100],
-                                "note": f"Response truncated: showing first 100 of {len(serialized_data)} items",
-                            }
-                        else:
-                            response_data = serialized_data
+                        response_data = budget_tool_result(
+                            self._make_json_serializable(tool_result.data), tool_name=tool_name
+                        )
 
                     tool_calls_made.append(
                         {
@@ -906,7 +899,7 @@ class GeminiProvider(LLMProvider):
                         result_data = {
                             "tool": tool_name,
                             "success": True,
-                            "data": tool_result.data,
+                            "data": response_data,
                         }
                         # Add warning if result is empty or has invalid params
                         if is_empty_result or has_invalid_params:
@@ -943,7 +936,7 @@ class GeminiProvider(LLMProvider):
 
                     # Collect tool result JSON for the following user turn
                     serializable_data = self._make_json_serializable(result_data)
-                    tool_result_json = json.dumps(serializable_data, indent=2)
+                    tool_result_json = compact_json(serializable_data)
                     tool_feedback_parts.append(f"Tool execution result:\n{tool_result_json}")
 
                     # If we got empty results or invalid params, suggest stopping to avoid loops

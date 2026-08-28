@@ -15,6 +15,7 @@ from copinance_os.ai.llm.resources import (
     PromptManager,
 )
 from copinance_os.ai.llm.streaming import LLMTextStreamEvent
+from copinance_os.ai.llm.tool_result_serialization import toon_tabular_enabled
 from copinance_os.core.execution_engine.base import BaseAnalysisExecutor
 from copinance_os.core.execution_engine.llm_stream_stdout import stdout_llm_stream_handler
 from copinance_os.core.pipeline.tools.context_tools import GetCurrentDateTool
@@ -618,7 +619,17 @@ class QuestionDrivenAnalysisExecutor(BaseAnalysisExecutor):
                 "  • Raw filing text/HTML after CIK + accession are known → get_sec_filing_content\n\n"
             )
 
-        tools_description = sec_routing + "\n".join(tool_descriptions)
+        toon_legend = ""
+        if toon_tabular_enabled():
+            toon_legend = (
+                "Some large tool results encode a table as TOON instead of a JSON array: "
+                "a header line `name[N]{col1,col2,...}:` (N rows, columns in this order), "
+                "then one indented row per line, each a comma-separated list of values "
+                "in that column order (missing value = empty). This is only ever a way "
+                "results are shown to you — never write TOON yourself.\n\n"
+            )
+
+        tools_description = sec_routing + toon_legend + "\n".join(tool_descriptions)
         examples_text = "\n".join(tool_examples) if tool_examples else ""
 
         return tools_description, examples_text
