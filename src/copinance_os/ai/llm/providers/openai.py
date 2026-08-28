@@ -28,6 +28,7 @@ from copinance_os.ai.llm.tool_loop_streaming import (
     generate_turn_text_with_stream,
     maybe_emit_tool_round_rollback,
 )
+from copinance_os.ai.llm.tool_result_serialization import budget_tool_result, compact_json
 from copinance_os.core.execution_engine.question_driven_tool_summary import (
     build_partial_synthesis_message,
     is_tool_call_json_text,
@@ -562,17 +563,9 @@ class OpenAIProvider(LLMProvider):
 
                     response_data = None
                     if tool_result.success and tool_result.data is not None:
-                        serialized_data = _make_json_serializable(tool_result.data)
-                        if isinstance(serialized_data, list) and len(serialized_data) > 100:
-                            response_data = {
-                                "_truncated": True,
-                                "_total_items": len(serialized_data),
-                                "_items_shown": 100,
-                                "data": serialized_data[:100],
-                                "note": f"Response truncated: showing first 100 of {len(serialized_data)} items",
-                            }
-                        else:
-                            response_data = serialized_data
+                        response_data = budget_tool_result(
+                            _make_json_serializable(tool_result.data), tool_name=tool_name
+                        )
 
                     tool_calls_made.append(
                         {
@@ -625,7 +618,7 @@ class OpenAIProvider(LLMProvider):
                             "error": tool_result.error or "Unknown error",
                         }
                     else:
-                        result_data = {"tool": tool_name, "success": True, "data": tool_result.data}
+                        result_data = {"tool": tool_name, "success": True, "data": response_data}
                         if is_empty_result or has_invalid_params:
                             warning_msg = ""
                             if has_invalid_params:
@@ -651,7 +644,7 @@ class OpenAIProvider(LLMProvider):
                                 )
                             result_data["warning"] = warning_msg
 
-                    tool_result_json = json.dumps(_make_json_serializable(result_data), indent=2)
+                    tool_result_json = compact_json(_make_json_serializable(result_data))
                     messages.append(
                         {"role": "tool", "tool_call_id": tc_id, "content": tool_result_json}
                     )
