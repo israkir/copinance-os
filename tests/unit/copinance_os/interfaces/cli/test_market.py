@@ -118,6 +118,48 @@ class TestMarketCLI:
         assert call_args.symbol == "AAPL"
         assert mock_console.print.called
 
+    @patch("copinance_os.interfaces.cli.commands.market.Table.add_row")
+    @patch("copinance_os.interfaces.cli.commands.market.get_container")
+    @patch("copinance_os.interfaces.cli.commands.market.Console")
+    def test_get_market_quote_none_open_high_low_falls_back_to_na(
+        self,
+        mock_console_class: MagicMock,
+        mock_get_container: MagicMock,
+        mock_add_row: MagicMock,
+    ) -> None:
+        """Live quotes report open/high/low as None (not missing) — must still show N/A."""
+        cache = AsyncMock()
+        cache.get = AsyncMock(return_value=None)
+        mock_get_container.return_value.cache_manager.return_value = cache
+
+        mock_uc = AsyncMock()
+        mock_uc.execute = AsyncMock(
+            return_value=MagicMock(
+                quote={
+                    "symbol": "AAPL",
+                    "current_price": Decimal("150.25"),
+                    "previous_close": Decimal("149.10"),
+                    "open": None,
+                    "high": None,
+                    "low": None,
+                    "volume": 1000000,
+                    "market_cap": 2000000000,
+                    "currency": "USD",
+                    "exchange": "NASDAQ",
+                    "timestamp": "2026-03-14T09:30:00+00:00",
+                },
+                symbol="AAPL",
+            )
+        )
+        mock_get_container.return_value.get_quote_use_case.return_value = mock_uc
+
+        get_market_quote(_typer_ctx(), symbol="aapl")
+
+        rows = {call.args[0]: call.args[1] for call in mock_add_row.call_args_list}
+        assert rows["Open"] == "N/A"
+        assert rows["High"] == "N/A"
+        assert rows["Low"] == "N/A"
+
     @patch("copinance_os.interfaces.cli.commands.market.get_container")
     @patch("copinance_os.interfaces.cli.commands.market.Console")
     def test_get_market_history(
